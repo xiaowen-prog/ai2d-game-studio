@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { STAGED_INSTRUCTIONS, stageHarnessPrompt } from './creationPrompts.js';
 import { EventEmitter } from 'node:events';
 import {
   CodexAppServer,
@@ -37,6 +38,14 @@ export interface GameHarnessRunOptions {
   projectId: string;
   cwd: string;
   prompt: string;
+  /** Host-authored stage contract. Never accepted directly from Renderer or model output. */
+  stageTask?: string;
+  stageScope?: 'candidates' | 'preview' | 'game';
+  /** Run current host checks before the first review, not only after a model pass. */
+  hostReviewFirst?: boolean;
+  beforeWrite?: () => Promise<void>;
+  /** Host-owned retry limit; candidate-only nodes can disable automatic repair calls. */
+  maxRepairAttempts?: number;
   /** Selected production cadence. Defaults to 60 only for compatibility callers. */
   targetFrameRate?: TargetFrameRate;
   model?: string | null;
@@ -47,6 +56,8 @@ export interface GameHarnessRunOptions {
   dynamicTools?: DynamicToolSpec[];
   /** App-owned image generation skill required for every Implementer turn. */
   imageGenerationSkill?: { name: string; path: string } | null;
+  /** Host-only preview edit that preserves already attested and referenced art. */
+  reuseApprovedImages?: boolean;
   /** Configured API is attempted first; Codex ImageGen remains the built-in fallback. */
   imageGenerationRoute?: 'configured-api' | 'codex-imagegen';
   /** Private host provenance state; this is fixed policy, not a user-selectable strategy. */
@@ -59,6 +70,8 @@ export interface GameHarnessRunOptions {
   refreshAudioGenerationRequirement?: () => Promise<HostAudioGenerationRequirement>;
   /** Deterministic host delivery gates, evaluated after every Reviewer pass. */
   validateHostDelivery?: (signal: AbortSignal) => Promise<HostDeliveryValidation>;
+  /** Host finalization after every writer, before any read-only artifact review. */
+  prepareHostReview?: () => Promise<void>;
   /** App-owned additions appended below fixed safety/production contracts. */
   promptAdditions?: Partial<Record<GameHarnessPhase, string>>;
 }
@@ -66,6 +79,8 @@ export interface GameHarnessRunOptions {
 export interface HostDeliveryValidation {
   ok: boolean;
   findings: string[];
+  /** Host-produced evidence, never obtained from model-authored summaries. */
+  evidence?: string[];
 }
 
 export interface GameHarnessTurnSummary {
@@ -281,6 +296,10 @@ export class GameHarness extends EventEmitter {
       throw new Error(`Project ${options.projectId} already has an active game harness run`);
     }
 
+    const maxRepairAttempts = options.maxRepairAttempts ?? MAX_GAME_HARNESS_REPAIR_ATTEMPTS;
+    if (!Number.isInteger(maxRepairAttempts) || maxRepairAttempts < 0 || maxRepairAttempts > MAX_GAME_HARNESS_REPAIR_ATTEMPTS) {
+      throw new Error('Invalid repair attempt limit');
+    }
     const active = createActiveRun(options.projectId);
     let plannerThreadId: string | null = null;
     let implementerThreadId: string | null = null;
@@ -290,6 +309,11 @@ export class GameHarness extends EventEmitter {
     let audioGenerationRequirement = normalizeAudioGenerationRequirement(
       options.audioGenerationRequirement ?? { state: 'not-required' },
     );
+    let currentHostDelivery: HostDeliveryValidation | null = null;
+    const stagedPrompt = (role: GameHarnessPhase, context = '', pass: 'artifact' | 'host-evidence' = 'artifact') =>
+      stageHarnessPrompt(role, options.stageTask!, context, pass) + '\n\n' + buildStagedProductionContracts(
+        options.stageScope ?? 'candidates', imageGenerationRequirement, targetFrameRate, imageGenerationRoute, audioGenerationRequirement);
+    const reviewEvidence = (prompt: string) => `${prompt}\n\n${hostReviewContract(currentHostDelivery, options.hostReviewFirst === true)}`;
     this.#activeRuns.set(options.projectId, active);
     this.#emitState(active, 'running');
     this.#emitAgentEvent(active, {
@@ -302,12 +326,14 @@ export class GameHarness extends EventEmitter {
 
     try {
       this.#throwIfStopped(active);
+      await options.beforeWrite?.();
+      this.#throwIfStopped(active);
       plannerThreadId = await this.#runtime.startThread({
         cwd: options.cwd,
         model: options.model,
         sandbox: 'read-only',
         approvalPolicy: 'never',
-        developerInstructions: PLANNER_INSTRUCTIONS,
+        developerInstructions: options.stageTask ? STAGED_INSTRUCTIONS.planner : PLANNER_INSTRUCTIONS,
         ephemeral: true,
       });
       this.#emitThread(options.projectId, plannerThreadId, 'planner', true);
@@ -323,7 +349,7 @@ export class GameHarness extends EventEmitter {
       const plannerTurn = await this.#executeTurn(active, {
         threadId: plannerThreadId,
         prompt: withPromptAddition(
-          buildPlannerPrompt(
+          options.stageTask ? stagedPrompt('planner') : buildPlannerPrompt(
             options.prompt,
             imageGenerationRequirement,
             targetFrameRate,
@@ -357,14 +383,14 @@ export class GameHarness extends EventEmitter {
             model: options.model,
             sandbox: 'workspace-write',
             approvalPolicy: 'on-request',
-            developerInstructions: IMPLEMENTER_INSTRUCTIONS,
+            developerInstructions: (options.stageTask ? STAGED_INSTRUCTIONS.implementer : IMPLEMENTER_INSTRUCTIONS) + (options.hostReviewFirst && options.stageScope !== 'candidates' ? HOST_ENGINE_EXECUTION : ''),
           })
         : await this.#runtime.startThread({
             cwd: options.cwd,
             model: options.model,
             sandbox: 'workspace-write',
             approvalPolicy: 'on-request',
-            developerInstructions: IMPLEMENTER_INSTRUCTIONS,
+            developerInstructions: (options.stageTask ? STAGED_INSTRUCTIONS.implementer : IMPLEMENTER_INSTRUCTIONS) + (options.hostReviewFirst && options.stageScope !== 'candidates' ? HOST_ENGINE_EXECUTION : ''),
             ephemeral: false,
             ...(options.dynamicTools ? { dynamicTools: options.dynamicTools } : {}),
           });
@@ -385,7 +411,7 @@ export class GameHarness extends EventEmitter {
       const implementationTurn = await this.#executeTurn(active, {
         threadId: implementerThreadId,
         prompt: withPromptAddition(
-          buildImplementationPrompt(
+          options.stageTask ? stagedPrompt('implementer', planner.text) : buildImplementationPrompt(
             options.prompt,
             planner.text,
             imageGenerationRequirement,
@@ -423,6 +449,10 @@ export class GameHarness extends EventEmitter {
       );
       this.#throwIfStopped(active);
 
+      await options.prepareHostReview?.();
+      this.#throwIfStopped(active);
+      if (options.hostReviewFirst) currentHostDelivery = await validateHostDelivery(active, options);
+      this.#throwIfStopped(active);
       this.#setPhase(active, 'reviewer');
       this.#throwIfStopped(active);
       reviewerThreadId = await this.#runtime.startThread({
@@ -430,7 +460,7 @@ export class GameHarness extends EventEmitter {
         model: options.model,
         sandbox: 'read-only',
         approvalPolicy: 'never',
-        developerInstructions: REVIEWER_INSTRUCTIONS,
+        developerInstructions: options.stageTask ? STAGED_INSTRUCTIONS.reviewer : REVIEWER_INSTRUCTIONS,
         ephemeral: true,
       });
       this.#emitThread(options.projectId, reviewerThreadId, 'reviewer', true);
@@ -446,7 +476,7 @@ export class GameHarness extends EventEmitter {
       const reviewerTurn = await this.#executeTurn(active, {
         threadId: reviewerThreadId,
         prompt: withPromptAddition(
-          buildReviewerPrompt(
+          reviewEvidence(options.stageTask ? stagedPrompt('reviewer', implementation.text, options.hostReviewFirst ? 'host-evidence' : 'artifact') : buildReviewerPrompt(
             options.prompt,
             planner.text,
             implementation.text,
@@ -454,7 +484,7 @@ export class GameHarness extends EventEmitter {
             targetFrameRate,
             imageGenerationRoute,
             audioGenerationRequirement,
-          ),
+          )),
           'reviewer',
           options.promptAdditions?.reviewer,
         ),
@@ -477,11 +507,16 @@ export class GameHarness extends EventEmitter {
 
       const repairs: GameHarnessTurnSummary[] = [];
       let findingAuthority: 'reviewer' | 'host' | 'mixed' = 'reviewer';
-      let hostValidatedForCurrentWorkspace = false;
+      let hostValidatedForCurrentWorkspace = currentHostDelivery?.ok === true;
+      if (currentHostDelivery && !currentHostDelivery.ok) {
+        review = mergePendingReviewWithHostFindings(review, hostDeliveryRepairReview(currentHostDelivery));
+        findingAuthority = 'mixed';
+      }
       while (true) {
         if (review.verdict === 'pass') {
           if (hostValidatedForCurrentWorkspace) break;
           const hostDelivery = await validateHostDelivery(active, options);
+          currentHostDelivery = hostDelivery;
           this.#throwIfStopped(active);
           if (!hostDelivery || hostDelivery.ok) {
             if (hostDelivery) {
@@ -499,14 +534,14 @@ export class GameHarness extends EventEmitter {
             const evidenceReviewTurn = await this.#executeTurn(active, {
               threadId: reviewerThreadId,
               prompt: withPromptAddition(
-                buildHostEvidenceReviewPrompt(
+                reviewEvidence(options.stageTask ? stagedPrompt('reviewer', 'Read current host checks and actual artifacts.', 'host-evidence') : buildHostEvidenceReviewPrompt(
                   options.prompt,
                   implementation.text,
                   imageGenerationRequirement,
                   targetFrameRate,
                   imageGenerationRoute,
                   audioGenerationRequirement,
-                ),
+                )),
                 'reviewer',
                 options.promptAdditions?.reviewer,
               ),
@@ -541,8 +576,8 @@ export class GameHarness extends EventEmitter {
           }
         }
 
-        if (repairs.length >= MAX_GAME_HARNESS_REPAIR_ATTEMPTS) {
-          const message = `Repair limit reached after ${MAX_GAME_HARNESS_REPAIR_ATTEMPTS} attempts: ${formatReviewMessage(review)}`;
+        if (repairs.length >= maxRepairAttempts) {
+          const message = `Repair limit reached after ${maxRepairAttempts} attempts: ${formatReviewMessage(review)}`;
           this.#emitAgentEvent(active, {
             kind: 'error',
             title: 'Implementer · repair limit reached',
@@ -550,7 +585,7 @@ export class GameHarness extends EventEmitter {
             stage: 'verify',
             method: 'harness/repair/exhausted',
           });
-          throw new Error(message);
+          throw new GameHarnessReviewFailedError(message);
         }
 
         const repairAttempt = repairs.length + 1;
@@ -566,15 +601,18 @@ export class GameHarness extends EventEmitter {
         this.#setPhase(active, 'repair');
         this.#emitAgentEvent(active, {
           kind: 'lifecycle',
-          title: `Implementer · repair ${repairAttempt}/${MAX_GAME_HARNESS_REPAIR_ATTEMPTS}`,
-          message: `Returning the unresolved findings to the same durable Implementer thread for bounded repair attempt ${repairAttempt} of ${MAX_GAME_HARNESS_REPAIR_ATTEMPTS}.`,
+          title: `Implementer · repair ${repairAttempt}/${maxRepairAttempts}`,
+          message: `Returning the unresolved findings to the same durable Implementer thread for bounded repair attempt ${repairAttempt} of ${maxRepairAttempts}.`,
           stage: 'code',
           method: 'harness/repair/attempt-started',
         });
+        await options.beforeWrite?.();
+        currentHostDelivery = null;
+        this.#throwIfStopped(active);
         const repairTurn = await this.#executeTurn(active, {
           threadId: implementerThreadId,
           prompt: withPromptAddition(
-            buildRepairPrompt(
+            options.stageTask ? stagedPrompt('repair', JSON.stringify(review)) : buildRepairPrompt(
               options.prompt,
               review,
               imageGenerationRequirement,
@@ -600,7 +638,7 @@ export class GameHarness extends EventEmitter {
         hostValidatedForCurrentWorkspace = false;
         this.#emitAgentEvent(active, {
           kind: 'assistant',
-          title: `Implementer · repair ${repairAttempt}/${MAX_GAME_HARNESS_REPAIR_ATTEMPTS} completed`,
+          title: `Implementer · repair ${repairAttempt}/${maxRepairAttempts} completed`,
           message: repair.text || `Repair attempt ${repairAttempt} completed.`,
           stage: 'code',
           method: 'harness/repair/attempt-completed',
@@ -620,7 +658,10 @@ export class GameHarness extends EventEmitter {
         // the repaired workspace. Otherwise the Reviewer can only see the
         // previous failed host report and request the same repair forever,
         // while the host callback never gets another chance to refresh it.
+        await options.prepareHostReview?.();
+        this.#throwIfStopped(active);
         const postRepairHostDelivery = await validateHostDelivery(active, options);
+        currentHostDelivery = postRepairHostDelivery;
         this.#throwIfStopped(active);
         if (postRepairHostDelivery && !postRepairHostDelivery.ok) {
           const hostReview = hostDeliveryRepairReview(postRepairHostDelivery);
@@ -632,7 +673,7 @@ export class GameHarness extends EventEmitter {
           }
           this.#emitAgentEvent(active, {
             kind: 'error',
-            title: `Host delivery · repair ${repairAttempt}/${MAX_GAME_HARNESS_REPAIR_ATTEMPTS} still failing`,
+            title: `Host delivery · repair ${repairAttempt}/${maxRepairAttempts} still failing`,
             message: formatReviewMessage(review),
             stage: 'verify',
             method: 'harness/host-delivery/post-repair-repair',
@@ -643,7 +684,7 @@ export class GameHarness extends EventEmitter {
           hostValidatedForCurrentWorkspace = true;
           this.#emitAgentEvent(active, {
             kind: 'assistant',
-            title: `Host delivery · repair ${repairAttempt}/${MAX_GAME_HARNESS_REPAIR_ATTEMPTS} passed`,
+            title: `Host delivery · repair ${repairAttempt}/${maxRepairAttempts} passed`,
             message: 'The deterministic host delivery checks passed on the repaired workspace.',
             stage: 'verify',
             method: 'harness/host-delivery/pass',
@@ -654,7 +695,7 @@ export class GameHarness extends EventEmitter {
         const finalReviewTurn = await this.#executeTurn(active, {
           threadId: reviewerThreadId,
           prompt: withPromptAddition(
-            buildPostRepairReviewPrompt(
+            reviewEvidence(options.stageTask ? stagedPrompt('reviewer', repair.text, 'host-evidence') : buildPostRepairReviewPrompt(
               options.prompt,
               review,
               repair.text,
@@ -664,7 +705,7 @@ export class GameHarness extends EventEmitter {
               audioGenerationRequirement,
               repairAttempt,
               MAX_GAME_HARNESS_REPAIR_ATTEMPTS,
-            ),
+            )),
             'reviewer',
             options.promptAdditions?.reviewer,
           ),
@@ -680,8 +721,8 @@ export class GameHarness extends EventEmitter {
         this.#emitAgentEvent(active, {
           kind: review.verdict === 'pass' ? 'assistant' : 'error',
           title: review.verdict === 'pass'
-            ? `Reviewer · repair ${repairAttempt}/${MAX_GAME_HARNESS_REPAIR_ATTEMPTS} verified`
-            : `Reviewer · more repairs required after ${repairAttempt}/${MAX_GAME_HARNESS_REPAIR_ATTEMPTS}`,
+            ? `Reviewer · repair ${repairAttempt}/${maxRepairAttempts} verified`
+            : `Reviewer · more repairs required after ${repairAttempt}/${maxRepairAttempts}`,
           message: formatReviewMessage(review),
           stage: 'verify',
           method: `harness/reviewer/post-repair-${review.verdict}`,
@@ -991,6 +1032,13 @@ export class GameHarness extends EventEmitter {
   }
 }
 
+export class GameHarnessReviewFailedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'GameHarnessReviewFailedError';
+  }
+}
+
 export class GameHarnessStoppedError extends Error {
   readonly projectId: string;
 
@@ -1051,7 +1099,9 @@ function validateImageGenerationRoute(
   if (route !== 'configured-api' && route !== 'codex-imagegen') {
     throw new Error('imageGenerationRoute must be configured-api or codex-imagegen');
   }
-  if (route === 'codex-imagegen' && !options.imageGenerationSkill) {
+  const approvedReuse = options.reuseApprovedImages === true && Boolean(options.stageTask) && options.stageScope === 'preview'
+    && options.hostReviewFirst === true && Boolean(options.validateHostDelivery) && options.imageGenerationRequirement?.state === 'trusted-and-referenced';
+  if (route === 'codex-imagegen' && !options.imageGenerationSkill && !approvedReuse) {
     throw new Error('Codex ImageGen and its imagegen skill are required for every game-building run when no image API is configured');
   }
   return route;
@@ -1104,6 +1154,7 @@ async function validateHostDelivery(
   const ok = result.ok && findings.length === 0;
   return {
     ok,
+    evidence: result.evidence?.filter((item): item is string => typeof item === 'string').slice(0, 20).map(item => item.slice(0, 20000)),
     findings: ok
       ? []
       : findings.length > 0
@@ -1566,4 +1617,39 @@ function readString(value: unknown): string | null {
 
 function asError(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
+}
+
+
+const HOST_ENGINE_EXECUTION = `
+The host executes Godot import, validation, Web export and the applicable playtest after each writer turn, before
+review. Do not duplicate native Godot execution, search for binaries, or escalate engine commands in the agent
+sandbox. Maintain project files and the executable playtest contract, run bounded source/unit checks if appropriate,
+then hand off to the host. Host failures return concrete diagnostics for repair. Never write artifacts/engine or
+artifacts/playtest. An old sandbox log is historical evidence, not a result for this host execution.
+`;
+
+export function hostReviewContract(result: HostDeliveryValidation | null, hostFirst: boolean): string {
+  if (!result) return hostFirst ? 'Current host checks are pending; do not invent a result.' : '';
+  return `<current_host_delivery>\n${JSON.stringify(result)}\n</current_host_delivery>
+This result was supplied directly by the host AFTER the latest writer and applies to the current workspace.
+Verify the actual source, production references and referenced captures. When this result names an engine report, it contains
+native import/validate/export diagnostics. Candidate-only stages do not require an engine report. Do not require an additional Godot execution from the read-only sandbox
+or treat user-directory/CA/permission errors from an older agent-local command as current engine failures when the
+same checks passed in the current host run. Actual current host errors, code defects, failed gameplay observations,
+or missing evidence still require repair; a host pass never overrides a concrete functional or visual defect.
+Only evidence named in this host result is current; history and model-written summaries cannot certify delivery.`;
+}
+
+export function buildStagedProductionContracts(
+  scope: 'candidates' | 'preview' | 'game', requirement?: HostImageGenerationRequirement,
+  fps: TargetFrameRate = DEFAULT_TARGET_FRAME_RATE,
+  route: NonNullable<GameHarnessRunOptions['imageGenerationRoute']> = 'codex-imagegen',
+  audio: HostAudioGenerationRequirement = { state: 'not-required' },
+): string {
+  if (scope === 'candidates') return 'Candidate-only scope: verify real registered images and private host provenance. No animation, engine, complete-game journey or music requirement at this node.';
+  const shared = [buildRequiredImageGenerationContract(requirement, route), buildVisualAssetCoverageContract(),
+    buildAnimationNeedsContract(), buildTargetFrameRateContract(fps)];
+  if (scope === 'game') shared.push(buildExperiencePlaytestContract(), buildAudioGenerationContract(audio));
+  else shared.push('Preview scope: demonstrate only the requested preview. Full victory/failure/pause/restart and generated music are deferred, not silently declared passed.');
+  return shared.join('\n\n');
 }

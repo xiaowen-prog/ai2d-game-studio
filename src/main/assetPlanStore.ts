@@ -43,6 +43,11 @@ export interface AssetPlanUpsertInput {
   options?: Readonly<Record<string, string | number | boolean>>;
 }
 
+/** Reconciliation updates updatedAt on old plans; it must not activate superseded assets. */
+export function assetPlanIsInScope(plan: AssetPlanRecord, scope?: { paths: string[]; since: string }): boolean {
+  return !scope || scope.paths.includes(plan.relativePath ?? '') || plan.createdAt >= scope.since;
+}
+
 /**
  * App-private expected-asset ledger. It intentionally lives outside Agent-
  * writable workspaces: asset-pack.json remains a manifest of real, validated

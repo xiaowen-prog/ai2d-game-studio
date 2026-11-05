@@ -593,7 +593,9 @@ function defaultTemplateRoots(
 ): string[] {
   const selfContained = join(dirname(binaryPath), 'editor_data', 'export_templates');
   if (platform === 'darwin') {
+    const bundle = dirname(dirname(dirname(binaryPath)));
     return [
+      ...(bundle.endsWith('.app') ? [join(dirname(bundle), 'editor_data', 'export_templates')] : []),
       selfContained,
       join(homeDirectory, 'Library/Application Support/Godot/export_templates'),
     ];

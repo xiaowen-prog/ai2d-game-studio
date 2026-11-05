@@ -1,3 +1,5 @@
+import type { CreationApi } from './creation.js';
+
 export type PipelineStage =
   | 'brief'
   | 'scaffold'
@@ -274,6 +276,7 @@ export interface BootstrapPayload {
 }
 
 export interface CreateProjectInput {
+  stagedCreation?: boolean;
   idea: string;
   projectDirectory: string;
   model?: string | null;
@@ -544,6 +547,7 @@ export interface LoginStartResult {
 }
 
 export interface NoobiApi {
+  creation: CreationApi;
   bootstrap(): Promise<BootstrapPayload>;
   refreshRuntime(): Promise<RuntimeStatus>;
   startLogin(): Promise<LoginStartResult>;

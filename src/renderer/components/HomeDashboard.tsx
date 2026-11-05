@@ -33,6 +33,7 @@ import { formatRelative, PROJECT_STATUS_LABELS } from '../ui';
 import { ModelPicker } from './ModelPicker';
 import { ProjectIconImage } from './ProjectIcon';
 import { RotatingIdeaInput } from './RotatingIdeaInput';
+import { isSendKey } from '../sendKey';
 
 const IDEA_STARTERS = [
   {
@@ -40,30 +41,14 @@ const IDEA_STARTERS = [
     prompt: '制作一个横版平台动作游戏，拥有流畅移动、冲刺、收集目标和可立即重玩的完整关卡。',
   },
   {
-    label: '射击',
-    prompt: '制作一个俯视角生存射击游戏，包含武器切换、敌人波次、受击反馈和完整胜负循环。',
-  },
-  {
-    label: '竞速',
-    prompt: '制作一个有漂移、计时、检查点和对手车辆的街机竞速游戏。',
-  },
-  {
-    label: 'RPG',
-    prompt: '制作一个小型动作 RPG，包含探索、战斗、装备成长、任务目标和 Boss 战。',
-  },
-  {
-    label: '卡牌',
-    prompt: '制作一个卡牌策略游戏，卡牌拥有独立素材、出牌动效、回合反馈和可完成的一局。',
-  },
-  {
-    label: '3D 冒险',
-    prompt: '制作一个第三人称 3D 冒险游戏，包含移动、镜头、交互、敌人和完整目标。',
+    label: '武侠打怪',
+    prompt: '我想做一个 2D 俯视武侠游戏，白衣剑客在竹林发射剑气，击败三波敌人，每波结束选一次升级。',
   },
 ] as const;
 
 const IMAGE_ACCEPT = '.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp';
-const FILE_ACCEPT = '.pdf,.md,.txt,.json,.csv,.wav,.mp3,.ogg,.glb';
-const SUPPORTED_ATTACHMENT = /\.(?:png|jpe?g|webp|pdf|md|txt|json|csv|wav|mp3|ogg|glb)$/iu;
+const FILE_ACCEPT = IMAGE_ACCEPT;
+const SUPPORTED_ATTACHMENT = /\.(?:png|jpe?g|webp)$/iu;
 const MAX_HOME_ATTACHMENTS = 20;
 
 export interface HomeLaunchInput {
@@ -102,7 +87,7 @@ export function HomeDashboard({
   onOpenSettings,
   onToggleTheme,
 }: HomeDashboardProps) {
-  const [idea, setIdea] = useState('');
+  const [idea, setIdea] = useState(() => { try { return localStorage.getItem('creation-home-idea') ?? ''; } catch { return ''; } });
   const [attachments, setAttachments] = useState<File[]>([]);
   const [attachmentNotice, setAttachmentNotice] = useState('');
   const [dragActive, setDragActive] = useState(false);
@@ -120,7 +105,8 @@ export function HomeDashboard({
   );
   const accountName = accountDisplayName(runtime);
   const runtimeReady = runtime.state === 'ready' && Boolean(runtime.account);
-  const launchReady = runtimeReady && imageGenerationAvailable && idea.trim().length > 0 && !busy;
+  const launchReady = idea.trim().length > 0 && !busy;
+  useEffect(() => { try { localStorage.setItem('creation-home-idea', idea); } catch { /* Keep the current text in memory. */ } }, [idea]);
 
   useEffect(() => {
     if (models.length === 0) {
@@ -151,6 +137,7 @@ export function HomeDashboard({
 
   async function submit() {
     if (!launchReady) return;
+    if (!runtimeReady) { onOpenSettings('account'); return; }
     await onLaunch({
       idea: idea.trim(),
       model: activeModel?.model ?? null,
@@ -161,7 +148,7 @@ export function HomeDashboard({
 
   function addAttachments(files: readonly File[]) {
     if (busy || files.length === 0) return;
-    const supported = files.filter((file) => SUPPORTED_ATTACHMENT.test(file.name));
+    const supported = files.filter((file) => SUPPORTED_ATTACHMENT.test(file.name) && file.size <= 10 * 1024 * 1024);
     const unsupportedCount = files.length - supported.length;
     const known = new Set(attachments.map(attachmentKey));
     const added: File[] = [];
@@ -175,7 +162,7 @@ export function HomeDashboard({
     if (added.length > 0) setAttachments((current) => [...current, ...added]);
     const messages = [
       added.length > 0 ? `已添加 ${added.length} 个附件` : '',
-      unsupportedCount > 0 ? `忽略 ${unsupportedCount} 个不支持的文件` : '',
+      unsupportedCount > 0 ? `忽略 ${unsupportedCount} 个格式不支持或超过 10 MB 的文件` : '',
       attachments.length + supported.length > MAX_HOME_ATTACHMENTS ? `最多 ${MAX_HOME_ATTACHMENTS} 个` : '',
     ].filter(Boolean);
     setAttachmentNotice(messages.join('；'));
@@ -208,9 +195,9 @@ export function HomeDashboard({
   }
 
   function handlePromptKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && launchReady) {
+    if (isSendKey(event)) {
       event.preventDefault();
-      void submit();
+      if (!event.repeat) void submit();
     }
   }
 
@@ -239,10 +226,16 @@ export function HomeDashboard({
         <section className="home-hero" aria-labelledby="home-title">
           <div className="home-hero-content">
             <span className={`home-loop-status ${runtimeReady ? 'is-ready' : 'is-attention'}`}>
-              <i /> {runtimeReady ? 'LOOP MODE 已就绪' : '完成运行时设置后开始'} <ArrowRight size={13} />
+              <i /> {runtimeReady ? 'AI 已连接，可以开始' : '先连接 AI，想法可以先写'} <ArrowRight size={13} />
             </span>
             <h1 id="home-title">今天想做什么游戏，{accountName}？</h1>
-            <p>描述玩法、美术和你最在意的体验。Noobi 会持续制作、试玩、评测和修复，直到得到可交付成品。</p>
+            <p>说出你的 2D 游戏想法。AI 先整理方向卡，你可以修改、确认并保存。</p>
+            {!runtimeReady ? <section className="home-first-use" aria-label="首次使用指引">
+              <div><strong>{runtime.account ? 'AI 连接暂时不可用' : '第一次使用？先登录 Codex'}</strong>
+                <p>{runtime.account ? '打开账户设置检查连接，再回来发送。你的想法会保留。' : '用已有 ChatGPT 账号连接 AI，不需要写代码。登录后回来发送想法，AI 会先给你方向卡。'}</p>
+                <ol><li>打开账户设置</li><li>在官方页面完成登录</li><li>回来发送游戏想法</li></ol></div>
+              <button type="button" className="primary-button" onClick={() => onOpenSettings('account')}>{runtime.account ? '检查连接' : '去登录'}</button>
+            </section> : null}
 
             <div
               className={`home-prompt-card${dragActive ? ' is-dragging' : ''}`}
@@ -328,19 +321,15 @@ export function HomeDashboard({
                   onEffortChange={setEffort}
                 />
                 <span className="home-prompt-spacer" aria-hidden="true" />
-                <span className="home-engine-advisor" title="Agent 会根据玩法、维度、动画和物理需求自动选择 Web 或 Godot">
-                  <Bot size={15} /> 引擎由 Agent 判断
+                <span className="home-engine-advisor" title="支持2D横版闯关和俯视打怪，题材不限">
+                  <Bot size={15} /> 先确认方向
                 </span>
                 <button
                   className="home-create-button"
                   type="button"
                   aria-label={busy ? '正在创建游戏' : '发送游戏创意'}
                   disabled={!launchReady}
-                  title={!runtimeReady
-                    ? '请先让 Codex 运行时就绪并完成登录'
-                    : !imageGenerationAvailable
-                      ? '请先配置图像服务或修复 Codex ImageGen'
-                      : idea.trim() ? '创建项目并启动 Agent' : '先描述游戏创意'}
+                  title={idea.trim() ? '保存想法，先确认制作方向' : '先描述游戏创意'}
                   onClick={() => void submit()}
                 >
                   {busy
@@ -352,11 +341,12 @@ export function HomeDashboard({
                 <div className="home-attachment-drop" role="status">
                   <Paperclip size={22} />
                   <strong>松开即可添加到游戏需求</strong>
-                  <span>支持图片、PDF、文本、音频和 GLB</span>
+                  <span>支持 PNG、JPEG、WebP 参考图，单张不超过 10 MB</span>
                 </div>
               ) : null}
             </div>
 
+            <small className="home-send-hint">Enter 发送 · Shift + Enter 换行 · 想法会自动保存</small>
             <div className="home-idea-starters" aria-label="游戏创意快捷选项">
               {IDEA_STARTERS.map((starter) => (
                 <button key={starter.label} type="button" onClick={() => setIdea(starter.prompt)}>
@@ -409,7 +399,7 @@ export function HomeDashboard({
             <div className="home-project-empty">
               <Sparkles size={20} />
               <strong>第一个游戏会出现在这里</strong>
-              <span>从上面的一句话开始，Noobi 会建立完整工程。</span>
+              <span>从一句话开始，AI 先给你一张可以修改的方向卡。</span>
             </div>
           )}
         </section>

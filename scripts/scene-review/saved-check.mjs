@@ -1,0 +1,36 @@
+// Actual saved AI sample; generation disabled. Checks fresh Electron and Web preview.
+import { app, dialog } from 'electron';
+import { readFile, writeFile } from 'node:fs/promises';
+import { resolve, join } from 'node:path';
+import assert from 'node:assert/strict';
+import { CodexAppServer } from '../../dist/main/codexAppServer.js';
+const mode=process.env.NOOBI_SCENE_VIEW??'topdown';
+const latest=JSON.parse(await readFile(resolve('.noobi-private/scene-review',`latest-${mode}.json`),'utf8'));
+assert.ok(latest.passed,'Real action chain must pass first');
+const before=JSON.parse(await readFile(join(latest.stateDirectory,'creation/records',`${latest.projectId}.json`),'utf8'));
+let calls=0;CodexAppServer.prototype.startTurn=async()=>{calls++;throw Error('No model calls in saved check');};
+app.setAppPath(resolve('.'));process.env.NOOBI_USER_DATA_DIR=latest.stateDirectory;process.env.NOOBI_DISABLE_GENERATION='1';delete process.env.NOOBI_RENDERER_URL;
+const timeout=setTimeout(()=>{console.error('Saved preview timeout');app.exit(1);},60_000);
+dialog.showErrorBox=(_t,m)=>{console.error(m);app.exit(1);};
+app.once('browser-window-created',(_e,win)=>win.webContents.once('did-finish-load',()=>void check(win).then(()=>{clearTimeout(timeout);app.exit(0);},error=>{console.error(error);clearTimeout(timeout);app.exit(1);})));
+async function check(win){const run=s=>win.webContents.executeJavaScript(s);const wait=async s=>{for(let i=0;i<300;i++){if(await run(s))return;await new Promise(r=>setTimeout(r,100));}throw Error(s);};
+ await wait(`!!document.querySelector('.home-project-grid button')`);await run(`document.querySelector('.home-project-grid button').click()`);await wait(`!!document.querySelector('iframe')`);
+ const reply=await run(`window.noobi.creation.get(${JSON.stringify(latest.projectId)})`);assert.equal(reply.ok,true);assert.deepEqual(reply.value.steps,before.steps);assert.equal(reply.value.steps.scene.status,'confirmed');
+ assert.ok(reply.value.steps.scene.artifact.scene);assert.equal(reply.value.steps.playable.status,'idle');
+ await new Promise(r=>setTimeout(r,4000));win.show();win.focus();win.webContents.focus();
+ const frames=win.webContents.mainFrame.framesInSubtree;const preview=frames.find(f=>/^http:\/\/127\.0\.0\.1:/u.test(f.url));assert.ok(preview,'Actual embedded web preview missing');
+ const page=await preview.executeJavaScript(`({canvas:!!document.querySelector('canvas'),width:document.querySelector('canvas')?.width,status:document.getElementById('status')?.style.display,error:document.getElementById('status-notice')?.textContent})`);assert.ok(page.canvas&&page.width>0);assert.ok(!page.error?.trim(),page.error);
+ await run(`document.querySelector('iframe').scrollIntoView({block:'center'})`);await new Promise(r=>setTimeout(r,400));
+ const rectangle=await run(`(()=>{const r=document.querySelector('iframe').getBoundingClientRect(),c=document.querySelector('.creation-content').getBoundingClientRect();const x=Math.max(r.x+2,c.x,0),y=Math.max(r.y+2,c.y,0),right=Math.min(r.right-2,c.right,innerWidth),bottom=Math.min(r.bottom-2,c.bottom,innerHeight);return {x:Math.ceil(x),y:Math.ceil(y),width:Math.floor(right-x),height:Math.floor(bottom-y)};})()`);
+ const capture=async name=>{const image=await win.webContents.capturePage(rectangle);await writeFile(join(latest.evidenceDirectory,name),image.toPNG());return image.toPNG();};
+ win.webContents.debugger.attach('1.3');
+ const sendKey=async(type,keyCode)=>{const key=keyCode==='Space'?' ':keyCode.toLowerCase();await win.webContents.debugger.sendCommand('Input.dispatchKeyEvent',{type:type==='keyDown'?'rawKeyDown':'keyUp',key,code:keyCode==='Space'?'Space':`Key${keyCode}`,windowsVirtualKeyCode:keyCode==='Space'?32:keyCode.charCodeAt(0),nativeVirtualKeyCode:keyCode==='D'?2:keyCode==='J'?38:49});};
+ await preview.executeJavaScript(`window.__acceptanceKeys=[];document.addEventListener('keydown',e=>window.__acceptanceKeys.push({key:e.key,code:e.code,trusted:e.isTrusted}));document.querySelector('canvas').focus()`);assert.equal(await run(`document.activeElement.tagName`),'IFRAME');const idle=await capture('网页-待机.png');
+ await sendKey('keyDown','D');await new Promise(r=>setTimeout(r,300));const walk=await capture('网页-移动.png');await sendKey('keyUp','D');assert.ok(!idle.equals(walk),'Preview unchanged under movement');await new Promise(r=>setTimeout(r,250));
+ await sendKey('keyDown',mode==='platformer'?'Space':'J');await new Promise(r=>setTimeout(r,120));await capture('网页-主动作.png');await sendKey('keyUp',mode==='platformer'?'Space':'J');
+ await writeFile(join(latest.evidenceDirectory,'桌面重开.png'),(await win.webContents.capturePage()).toPNG());
+ win.setMinimumSize(400,500);win.setContentSize(640,900);await new Promise(r=>setTimeout(r,400));await run(`document.querySelector('.creation-workspace').scrollTop=0`);await writeFile(join(latest.evidenceDirectory,'窄窗口.png'),(await win.webContents.capturePage()).toPNG());
+ const layout=await run(`({width:innerWidth,body:document.body.scrollWidth,main:document.querySelector('.creation-main').getBoundingClientRect().width,composerTop:document.querySelector('.creation-composer').getBoundingClientRect().top,contentBottom:document.querySelector('.creation-content').getBoundingClientRect().bottom})`);assert.ok(layout.body<=layout.width+2,'Horizontal overflow in narrow window');assert.ok(layout.composerTop>=layout.contentBottom-2,'Composer overlaps content');assert.equal(calls,0);
+ await writeFile(join(latest.evidenceDirectory,'真实保存复核.json'),JSON.stringify({checkedAt:new Date().toISOString(),passed:true,processId:process.pid,realModelCalls:calls,webPreview:page,rectangle,layout,keyEvents:await preview.executeJavaScript('window.__acceptanceKeys'),checks:['新的应用进程恢复同一场景版本与确认状态','场景与真实人物网页预览加载','真实窗口键盘移动前后画面变化','窄窗口无横向溢出','玩法未开始，零模型调用']},null,2));console.log('Saved scene and actual Web preview passed; 0 model calls');
+}
+await import('../../dist/main/main.js');

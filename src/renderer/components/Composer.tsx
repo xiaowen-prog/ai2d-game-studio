@@ -7,6 +7,7 @@ import type {
   ProjectRecord,
 } from '../../shared/contracts';
 import { AssetRequirement } from './AssetRequirement';
+import { isSendKey } from '../sendKey';
 
 interface ComposerProps {
   project: ProjectRecord;
@@ -170,13 +171,9 @@ export function Composer({
             setPrompt(event.target.value);
           }}
           onKeyDown={(event) => {
-            if (
-              (event.metaKey || event.ctrlKey) &&
-              event.key === 'Enter' &&
-              !disabled
-            ) {
+            if (isSendKey(event)) {
               event.preventDefault();
-              void submit();
+              if (!disabled && !event.repeat) void submit();
             }
           }}
         />
@@ -246,7 +243,7 @@ export function Composer({
                 className="composer-action is-send"
                 type="button"
                 aria-label="发送制作要求"
-                title="发送制作要求（⌘/Ctrl + Enter）"
+                title="Enter 发送 · Shift + Enter 换行"
                 disabled={disabled || models.length === 0}
                 onClick={() => void submit()}
               >

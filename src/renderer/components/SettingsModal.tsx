@@ -455,9 +455,9 @@ function AccountSettings({
   return (
     <section>
       <SettingsHeading
-        eyebrow="CODEX APP SERVER"
-        title="运行时与账户"
-        description="Noobi 通过官方 App Server 使用 Codex；认证在系统浏览器中完成。"
+        eyebrow="CODEX"
+        title={runtime.account ? 'AI 账户已连接' : '登录后开始制作'}
+        description={runtime.account ? '关闭设置，回到首页发送你的游戏想法。' : '点下方“登录 Codex”，用已有 ChatGPT 账号在官方页面登录，再回到这里。你的想法会保留。'}
         action={
           <button className="secondary-button compact" type="button" disabled={busy} onClick={onRefresh}>
             <RefreshCw size={13} className={busy ? 'spin' : ''} /> 刷新
@@ -465,7 +465,8 @@ function AccountSettings({
         }
       />
 
-      <div className={`runtime-card state-${runtime.state}`}>
+      <details className={`runtime-card state-${runtime.state}`}>
+        <summary>连接详情（排查问题时查看）</summary>
         <div className="runtime-card-heading">
           <span className={`runtime-dot state-${runtime.state}`} />
           <div>
@@ -481,7 +482,7 @@ function AccountSettings({
           <div><dt>Image route</dt><dd>{runtime.capabilities.externalImageGeneration ? '外部 API 优先' : runtime.capabilities.imageGeneration ? 'Codex ImageGen' : '当前不可用'}</dd></div>
           <div><dt>Media tools</dt><dd>{runtime.state === 'ready' ? '素材库 / 音效已接入' : '等待运行时'}</dd></div>
         </dl>
-      </div>
+      </details>
 
       <div className="account-card">
         <div className="account-icon"><SquareTerminal size={20} /></div>
@@ -496,16 +497,17 @@ function AccountSettings({
           </button>
         ) : (
           <button className="primary-button compact" type="button" disabled={busy} onClick={onLogin}>
-            <LogIn size={13} /> 登录
+            <LogIn size={13} /> 登录 Codex
           </button>
         )}
       </div>
 
-      {login ? (
+      {login && !runtime.account ? (
         <div className="login-instructions">
           <Monitor size={17} />
           <div>
             <strong>在官方页面完成登录</strong>
+            <span>完成后回到此窗口；若状态没更新，点右上角“刷新”。显示“AI 账户已连接”后，关闭设置并发送想法。</span>
             {login.userCode ? <code>{login.userCode}</code> : null}
             {login.verificationUrl || login.authUrl ? (
               <a href={login.verificationUrl ?? login.authUrl} target="_blank" rel="noreferrer">

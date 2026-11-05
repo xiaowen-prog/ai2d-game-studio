@@ -5,6 +5,7 @@ import type { StartThreadOptions, StartTurnOptions } from './codexAppServer.js';
 import type { CodexAppServer } from './codexAppServer.js';
 import {
   buildAudioGenerationContract,
+  buildStagedProductionContracts,
   buildAnimationNeedsContract,
   buildExperiencePlaytestContract,
   buildModel3dGenerationContract,
@@ -83,6 +84,45 @@ class CapturingRuntime extends EventEmitter {
 }
 
 describe('game harness required ImageGen contract', () => {
+  it('finalizes protected edits before the first review and distinguishes fresh host evidence', async () => {
+    const pass = JSON.stringify({ verdict: 'pass', summary: 'Checked', findings: [] });
+    const runtime = new CapturingRuntime(['Plan', 'Generated proposal', pass, pass]);
+    let prepared = false;
+    await new GameHarness(runtime as unknown as CodexAppServer).run({ projectId: 'scoped-edit', cwd: '/tmp/scoped-edit',
+      prompt: 'white clothes', stageTask: 'CHARACTER CANDIDATES ONLY', maxRepairAttempts: 0,
+      imageGenerationSkill: { name: 'imagegen', path: '/tmp/imagegen/SKILL.md' },
+      prepareHostReview: async () => { expect(runtime.turns).toHaveLength(2); prepared = true; },
+      validateHostDelivery: async () => { expect(prepared).toBe(true); expect(runtime.turns).toHaveLength(3); return { ok: true, findings: [] }; },
+    });
+    expect(runtime.turns[2].prompt).toContain('第一轮成果审查');
+    expect(runtime.turns[3].prompt).toContain('宿主证据复核');
+    expect(runtime.turns[3].prompt).toContain('taskId');
+  });
+  it('hands a completed read-only plan to an explicitly writable implementation turn', async () => {
+    const plan = '青衣剑客和红衣剑客。本轮为只读规划，尚未生成图片或写入文件。';
+    const runtime = new CapturingRuntime([plan, 'Generated two images and the manifest',
+      JSON.stringify({ verdict: 'pass', summary: 'Two candidates exist', findings: [] })]);
+    await new GameHarness(runtime as unknown as CodexAppServer).run({ projectId: 'candidate-handoff', cwd: '/tmp/candidates',
+      prompt: '制作人物', stageTask: 'CHARACTER CANDIDATES ONLY', maxRepairAttempts: 0,
+      imageGenerationSkill: { name: 'imagegen', path: '/tmp/imagegen/SKILL.md' } });
+    expect(runtime.threads[0].sandbox).toBe('read-only');
+    expect(runtime.threads[1].sandbox).toBe('workspace-write');
+    const prompt = runtime.turns[1].prompt;
+    expect(prompt).toContain(JSON.stringify({ previousAgentOutput: plan }));
+    const currentInstruction = prompt.split('END PREVIOUS AGENT REFERENCE')[1];
+    expect(currentInstruction).toContain('YOUR CURRENT ROLE: implementer');
+    expect(currentInstruction).toContain('现在执行制作');
+    expect(runtime.turns[1].skills).toEqual([{ name: 'imagegen', path: '/tmp/imagegen/SKILL.md' }]);
+  });
+  it('does not spend repair turns when the host disables automatic candidate retries', async () => {
+    const runtime = new CapturingRuntime(['Plan candidates', 'Wrote candidates',
+      JSON.stringify({ verdict: 'repair', summary: 'Wrong appearance', findings: ['Keep the original weapon'] })]);
+    const harness = new GameHarness(runtime as unknown as CodexAppServer);
+    await expect(harness.run({ projectId: 'candidate-only', cwd: '/tmp/candidates', prompt: 'edit clothes',
+      stageTask: 'CHARACTER CANDIDATES ONLY', maxRepairAttempts: 0,
+      imageGenerationSkill: { name: 'imagegen', path: '/tmp/imagegen/SKILL.md' } })).rejects.toThrow('Repair limit reached after 0 attempts');
+    expect(runtime.turns).toHaveLength(3);
+  });
   it('injects the required ImageGen contract into planning, implementation, review, repair, and re-review', async () => {
     const runtime = new CapturingRuntime([
       'Plan the game.',
@@ -591,6 +631,19 @@ describe('game harness required ImageGen contract', () => {
     expect(runtime.turns).toHaveLength(0);
   });
 
+  it('allows a scoped code-only preview with privately attested art and still requires host checks', async () => {
+    const runtime = new CapturingRuntime(['plan', 'implemented', '{"verdict":"pass","summary":"checked","findings":[]}']);
+    const harness = new GameHarness(runtime as unknown as CodexAppServer);
+    const options = { projectId:'reuse', cwd:'/tmp/reuse', prompt:'double jump', stageTask:'Keep approved art', stageScope:'preview' as const, hostReviewFirst:true,
+      reuseApprovedImages:true, imageGenerationRequirement:{state:'trusted-and-referenced' as const,relativePath:'public/assets/images/hero.png'},
+      validateHostDelivery: async()=>({ok:true,findings:[]}) };
+    await harness.run(options); expect(runtime.turns).toHaveLength(3);
+    expect(runtime.turns[1].skills).toBeUndefined();
+    await expect(harness.run({...options, imageGenerationRequirement:{state:'fresh-generation-required'}})).rejects.toThrow('required for every game-building run');
+    await expect(harness.run({...options, stageScope:'game'})).rejects.toThrow('required for every game-building run');
+    expect(runtime.turns).toHaveLength(3);
+  });
+
   it('allows a configured image API without the Codex imagegen skill and keeps role preferences below fixed authority', async () => {
     const runtime = new CapturingRuntime([
       'Plan the game.',
@@ -662,3 +715,40 @@ describe('game harness required ImageGen contract', () => {
     expect(prompt).not.toContain('MUST invoke $imagegen during this run');
   });
 });
+
+describe('host-first review and scoped reuse', () => {
+  it('gives the first reviewer fresh host checks without an extra review turn', async () => {
+    const runtime = new CapturingRuntime(['plan', 'implemented', '{"verdict":"pass","summary":"checked","findings":[]}']);
+    let checks = 0;
+    const harness = new GameHarness(runtime as unknown as CodexAppServer);
+    await harness.run({ projectId: 'fresh', cwd: '/tmp/game', prompt: 'change speed', hostReviewFirst: true, imageGenerationSkill: { name: 'imagegen', path: '/tmp/imagegen/SKILL.md' },
+      validateHostDelivery: async () => { checks++; expect(runtime.turns).toHaveLength(2); return { ok: true, findings: [], evidence: ['current-run-123'] }; } });
+    expect(checks).toBe(1); expect(runtime.turns).toHaveLength(3);
+    expect(runtime.turns[2].prompt).toContain('current-run-123');
+    expect(runtime.threads[1].developerInstructions).toContain('Do not duplicate native Godot execution');
+  });
+  it('blocks completion on host failure even when the reviewer says pass', async () => {
+    const runtime = new CapturingRuntime(['plan', 'implemented', '{"verdict":"pass","summary":"looks fine","findings":[]}']);
+    const harness = new GameHarness(runtime as unknown as CodexAppServer);
+    await expect(harness.run({ projectId: 'bad', cwd: '/tmp/game', prompt: 'change', hostReviewFirst: true, imageGenerationSkill: { name: 'imagegen', path: '/tmp/imagegen/SKILL.md' }, maxRepairAttempts: 0,
+      validateHostDelivery: async () => ({ ok: false, findings: ['GODOT_BUILD: actual parse error'] }) })).rejects.toThrow('actual parse error');
+  });
+  it('reruns finalization and host checks after repair before reviewing again', async () => {
+    const runtime = new CapturingRuntime(['plan', 'impl', '{"verdict":"repair","summary":"wrong speed","findings":["speed"]}', 'fixed', '{"verdict":"pass","summary":"fixed","findings":[]}']);
+    const harness = new GameHarness(runtime as unknown as CodexAppServer); let prepared = 0; let archived = 0; let checked = 0;
+    await harness.run({ projectId: 'repair-fresh', cwd: '/tmp/game', prompt: 'speed', hostReviewFirst: true, imageGenerationSkill: { name: 'imagegen', path: '/tmp/imagegen/SKILL.md' },
+      beforeWrite: async () => { archived++; }, prepareHostReview: async () => { prepared++; },
+      validateHostDelivery: async () => { checked++; return { ok: true, findings: [], evidence: [`current-${checked}`] }; } });
+    expect([prepared, archived, checked]).toEqual([2, 2, 2]);
+    expect(runtime.turns[4].prompt).toContain('current-2'); expect(runtime.turns[4].prompt).not.toContain('current-1');
+  });
+});
+
+ it('reuses original animation and timing contracts only for preview/game nodes', () => {
+   const candidates = buildStagedProductionContracts('candidates');
+   const preview = buildStagedProductionContracts('preview');
+   const game = buildStagedProductionContracts('game');
+   expect(candidates).not.toContain('<animation_needs_contract>');
+   expect(preview).toContain('<animation_needs_contract>'); expect(preview).toContain('<target_frame_rate_contract');
+   expect(preview).not.toContain('<experience_playtest_contract'); expect(game).toContain('<experience_playtest_contract');
+ });

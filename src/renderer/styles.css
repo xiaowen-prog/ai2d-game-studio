@@ -6924,6 +6924,13 @@ a {
   -webkit-backdrop-filter: blur(28px) saturate(1.7);
 }
 
+.home-first-use{display:flex;align-items:center;gap:24px;width:100%;margin-top:24px;padding:18px 22px;text-align:left;border:1px solid var(--glass-border);border-radius:16px;background:var(--glass-surface);color:var(--studio-text)}
+.home-first-use>div{flex:1;min-width:0}.home-first-use strong{font-size:16px}.home-first-use p{font-size:13px;line-height:1.7;margin:8px 0;color:var(--studio-muted)}
+.home-first-use ol{display:flex;flex-wrap:wrap;gap:8px 26px;padding-left:18px;font-size:12px;line-height:1.7;margin:8px 0 0}.home-first-use>button{flex-shrink:0}
+.home-send-hint{display:block;margin-top:12px;color:var(--studio-muted);font-size:12px}
+.runtime-card summary{cursor:pointer;font-size:12px;line-height:1.8}.runtime-card[open] summary{margin-bottom:14px}
+@media(max-width:760px){.home-first-use{align-items:stretch;flex-direction:column;gap:12px;padding:16px}.home-first-use ol{flex-direction:column;gap:4px}.home-send-hint{font-size:11px}}
+
 .home-prompt-card.is-dragging {
   border-color: var(--studio-accent);
   box-shadow:

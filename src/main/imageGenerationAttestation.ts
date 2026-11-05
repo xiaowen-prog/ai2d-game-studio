@@ -231,6 +231,14 @@ export class ImageGenerationAttestationStore {
     };
   }
 
+  /** Staged candidate art is shown by the host before it has a production-scene reference. */
+  async hasGeneratedProof(projectId: string, root: string, relativePath: string, sha256: string): Promise<boolean> {
+    if (!IMAGE_PATH.test(relativePath) || !SHA256.test(sha256)) return false;
+    const records = await this.#forProject(projectId);
+    return records.some((item) => item.relativePath === relativePath && item.sha256 === sha256)
+      && await projectAssetMatches(root, relativePath, sha256);
+  }
+
   async verifyAudio(input: {
     projectId: string;
     root: string;

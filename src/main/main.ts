@@ -1,5 +1,8 @@
+import { inspectPlatformer } from './platformerInspection.js';
+import { inspectCharacterActionPlayback } from './characterActionInspection.js';
+import { archiveCurrentReviewEvidence, captureGodotChecks, currentEngineEvidence } from './hostReviewEvidence.js';
 import { randomUUID } from 'node:crypto';
-import { lstat, mkdir, readFile, realpath } from 'node:fs/promises';
+import { lstat, mkdir, readFile, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -53,7 +56,9 @@ import {
   NOOBI_SCENE_IDS,
 } from '../shared/contracts.js';
 import { AssetStore } from './assetStore.js';
-import { AssetPlanStore } from './assetPlanStore.js';
+import { characterInspectionPreview } from './characterImageInspection.js';
+import { previewScopedCharacterEdit } from './characterScopedEdit.js';
+import { AssetPlanStore, assetPlanIsInScope } from './assetPlanStore.js';
 import { ApprovalBroker } from './approvalBroker.js';
 import { CodexAppServer } from './codexAppServer.js';
 import { EventLog } from './eventLog.js';
@@ -94,7 +99,7 @@ import {
   MediaProviderStore,
   type MediaProviderSummary,
 } from './mediaProviderStore.js';
-import { MEDIA_DYNAMIC_TOOLS, MediaToolBroker } from './mediaToolBroker.js';
+import { CHARACTER_EDIT_PREVIEW_TOOL, MEDIA_DYNAMIC_TOOLS, MediaToolBroker } from './mediaToolBroker.js';
 import { PreviewServer } from './previewServer.js';
 import {
   generateAiProjectIcon,
@@ -120,6 +125,23 @@ import {
 } from './workspaceTemplate.js';
 
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
+import { CreationWorkflowStore, CreationError } from './creationWorkflowStore.js';
+import { CreationWorkflowService, publicCreationError } from './creationWorkflowService.js';
+import { CreationVersionStore } from './creationVersionStore.js';
+import { StagedCreationGenerator } from './creationGenerator.js';
+import { isCreationStageEnabled, creationStageLimit, isCharacterActionTask, type CreationAction, type CreationReply, type CreationWorkflow } from '../shared/creation.js';
+
+const creationProjectIds = new Set<string>();
+const creationRunningIds = new Set<string>();
+const creationCandidateRoots = new Map<string, string>();
+const creationEditPreviewCounts = new Map<string, number>();
+let creationService: CreationWorkflowService;
+let creationGenerator: StagedCreationGenerator;
+const creationPreviews = new PreviewServer();
+
+app.setPath('userData', process.env.NOOBI_USER_DATA_DIR
+  ? resolve(process.env.NOOBI_USER_DATA_DIR)
+  : join(app.getPath('appData'), 'AI-2D-Studio'));
 const smokeCapture = process.env.NOOBI_SMOKE_CAPTURE?.trim() || null;
 if (smokeCapture) app.setPath('userData', resolve('.noobi-smoke/user-data'));
 
@@ -130,6 +152,7 @@ const runtime = new CodexAppServer({
 });
 const engineAdvisor = new GameEngineAdvisor(runtime);
 const harness = new GameHarness(runtime);
+const creationHarness = new GameHarness(runtime);
 const previews = new PreviewServer();
 const playtestPreviews = new PreviewServer();
 const gameplayExperienceEvaluator = new GameplayExperienceEvaluator({
@@ -201,6 +224,7 @@ async function launch(): Promise<void> {
   const userData = app.getPath('userData');
   const defaultWorkspace = smokeCapture
     ? join(userData, 'smoke-projects')
+    : process.env.NOOBI_USER_DATA_DIR ? join(userData, 'projects')
     : join(homedir(), 'Noobi Games');
   projectStore = new ProjectStore({
     storageFile: join(userData, 'projects.json'),
@@ -247,7 +271,20 @@ async function launch(): Promise<void> {
       const route = threadRoutes.get(threadId);
       if (!route || route.role !== 'implementer') return null;
       const project = await projectStore.get(route.projectId);
-      return { id: project.id, root: project.root };
+      if (creationCandidateRoots.has(project.id)) await waitForAssetIngestions(project.id);
+      return { id: project.id, root: creationCandidateRoots.get(project.id) ?? project.root };
+    },
+    inspectAsset: async (project, asset) => creationCandidateRoots.has(project.id) && asset.kind === 'image'
+      ? characterInspectionPreview(project.root, asset.relativePath) : null,
+    previewCharacterEdit: async (project) => {
+      const workflow = await creationService.get(project.id);
+      if (creationCandidateRoots.get(project.id) !== project.root || workflow?.currentStage !== 'character'
+        || workflow.task?.state !== 'running') throw new CreationError('INVALID_EDIT_REGION', '当前没有进行中的人物修改。');
+      const count = creationEditPreviewCounts.get(project.id) ?? 0;
+      if (count >= 3) throw new CreationError('PREVIEW_LIMIT', '本次局部预览次数已用完，请交付当前成果供审查。');
+      creationEditPreviewCounts.set(project.id, count + 1);
+      return previewScopedCharacterEdit(project.root, workflow,
+        (path, hash) => imageGenerationAttestations.hasGeneratedProof(project.id, project.root, path, hash));
     },
     onAssetsChanged: (projectId, assets) => {
       broadcast('noobi:event:assets', { projectId, assets });
@@ -288,6 +325,7 @@ async function launch(): Promise<void> {
     promptTemplateStore.init(),
   ]);
   await recoverInterruptedProjects();
+  await initializeCreation();
   void backfillProjectIcons();
 
   bindRuntimeEvents();
@@ -295,6 +333,88 @@ async function launch(): Promise<void> {
   bindIpc();
   await ensureSmokeProject();
   await createWindow();
+}
+
+async function creationReply<T>(operation: () => Promise<T>): Promise<CreationReply<T>> {
+  try { return { ok: true, value: await operation() }; }
+  catch (error) { return { ok: false, error: publicCreationError(error) }; }
+}
+
+async function initializeCreation(): Promise<void> {
+  const storage = new CreationWorkflowStore(join(app.getPath('userData'), 'creation', 'records'));
+  const versions = new CreationVersionStore(join(app.getPath('userData'), 'creation', 'artifacts'));
+  creationGenerator = new StagedCreationGenerator({
+    runtime, harness: creationHarness, versions, previews: creationPreviews,
+    project: (id) => projectStore.get(id), settings: () => projectStore.getSettings(),
+    candidateRoute: (id, root) => { creationEditPreviewCounts.delete(id); if (root) creationCandidateRoots.set(id, root); else creationCandidateRoots.delete(id); },
+    waitForMedia: waitForAssetIngestions,
+    hasImageProof: (id, root, path, hash) => imageGenerationAttestations.hasGeneratedProof(id, root, path, hash),
+    recordScopedImageProof: (projectId, relativePath, sha256) => imageGenerationAttestations.record({ projectId, relativePath, sha256, provider: 'codex-imagegen-scoped-edit' }),
+    mediaRequirements: async (project, completeGame) => {
+      await waitForAssetIngestions(project.id);
+      const provider = activeMediaProvider('audio');
+      return { image: await resolveHostImageGenerationRequirement(project),
+        audio: await resolveHostAudioGenerationRequirement(project, completeGame && Boolean(provider && isMiniMaxAudioPreset(provider.presetId))) };
+    },
+    validatePlatformer: (project, inputs, signal) => inspectPlatformer(project.root, inputs, godotEnvironmentService, signal),
+    validateActions: (project, manifest, signal, scene) => inspectCharacterActionPlayback(project.root, manifest, godotEnvironmentService, signal, scene),
+    validateDelivery: (project, scope, signal, assetScope) => {
+      const provider = activeMediaProvider('audio');
+      return validateProjectDelivery(project, scope === 'game' && Boolean(provider && isMiniMaxAudioPreset(provider.presetId)), signal, scope, assetScope);
+    },
+    preflight: async (workflow) => {
+      if (!isCreationStageEnabled(workflow.currentStage, creationStageLimit(workflow.steps.direction.artifact?.direction?.genre))) throw new CreationError('STAGE_UNAVAILABLE', '本节点只开放横版核心试玩；俯视试玩和完整游戏尚未开放。');
+      if (process.env.NOOBI_DISABLE_GENERATION === '1') throw new CreationError('GENERATION_DISABLED', '当前为本地检查模式，未调用模型或图片服务。');
+      const status = await runtime.start();
+      if (!status.account) throw new CreationError('ACCOUNT_REQUIRED', '请先在设置中登录 Codex，草稿已保留。');
+      if (workflow.currentStage === 'direction') return { tools: [], imageSkill: null };
+      const actions = isCharacterActionTask(workflow);
+      const requiresEngine = workflow.currentStage !== 'character' || actions;
+      if (requiresEngine) {
+        const environment = await godotEnvironmentService.refresh();
+        if (!environment.canExportProjects || !environment.exportTemplates.targets.web) {
+          throw new CreationError('GODOT_REQUIRED', '请在设置 → 环境管理中配置 Godot 4 和匹配的网页导出模板。已确认内容仍保留。');
+        }
+      }
+      if (workflow.currentStage === 'playable') return { tools: [], imageSkill: null };
+      const imageSkill = await resolveImageGenerationSkill();
+      const editingCharacter = workflow.currentStage === 'character' && !actions && Boolean(workflow.steps.character.artifact?.selectedCharacterId);
+      if ((editingCharacter || actions) && (!status.capabilities.imageGeneration || !imageSkill)) {
+        throw new CreationError('IMAGE_EDIT_REQUIRED', '修改人物需要支持原图编辑的 Codex 图片能力。请检查连接；原来的人物已保留。');
+      }
+      if (!activeMediaProvider('image') && (!status.capabilities.imageGeneration || !imageSkill)) {
+        throw new CreationError('IMAGE_REQUIRED', '请在设置中配置图片服务，或修复 Codex 图片生成能力。');
+      }
+      const allowed = editingCharacter ? ['noobi_asset_list', 'noobi_asset_register']
+        : ['noobi_asset_plan', 'noobi_asset_list', 'noobi_asset_register', 'noobi_image_generate'];
+      return { tools: [...MEDIA_DYNAMIC_TOOLS.filter((tool) => ['character', 'scene'].includes(workflow.currentStage)
+        ? allowed.includes(tool.name) : tool.name !== 'noobi_model3d_generate'), ...(editingCharacter ? [CHARACTER_EDIT_PREVIEW_TOOL] : [])], imageSkill,
+        imageRoute: editingCharacter || actions || !activeMediaProvider('image') ? 'codex-imagegen' : 'configured-api' };
+    },
+  });
+  creationService = new CreationWorkflowService({ store: storage, generator: creationGenerator, characterActionsEnabled: true,
+    validateSnapshot: async (id, snapshot) => { await versions.root(id, snapshot); },
+    onChanged: (workflow) => {
+      creationProjectIds.add(workflow.projectId);
+      if (workflow.task?.state === 'running') creationRunningIds.add(workflow.projectId); else creationRunningIds.delete(workflow.projectId);
+      broadcast('noobi:event:creation', workflow);
+      const step = workflow.steps[workflow.currentStage];
+      const status: ProjectStatus = workflow.completed ? 'completed' : step.status === 'running' ? 'running'
+        : step.status === 'failed' ? 'failed' : step.status === 'stopped' ? 'stopped' : 'waiting';
+      void updateProject(workflow.projectId, { status, lastError: workflow.error?.message ?? null,
+        stage: workflow.completed ? 'complete' : workflow.currentStage === 'direction' ? 'brief'
+          : ['character', 'scene'].includes(workflow.currentStage) ? 'assets' : 'code',
+        activeTurnId: null, threadId: null }).catch(() => undefined);
+    },
+  });
+  for (const project of await projectStore.list()) await creationService.recover(project.id);
+  creationHarness.on('thread', (event: GameHarnessThreadEvent) => {
+    threadRoutes.set(event.threadId, { projectId: event.projectId, role: event.role });
+  });
+  creationHarness.on('threadClosed', ({ threadId }: { threadId: string }) => {
+    threadRoutes.delete(threadId); threadActivityStages.delete(threadId);
+  });
+  creationHarness.on('event', (event: AgentEvent) => emitAgentEvent(event));
 }
 
 async function createWindow(): Promise<void> {
@@ -433,6 +553,19 @@ function bindHarnessEvents(): void {
 }
 
 function bindIpc(): void {
+  handle('noobi:creation:get', (_event, projectId: string) => creationReply(async () => {
+    await projectStore.get(validateProjectId(projectId));
+    return creationService.get(projectId);
+  }));
+  handle('noobi:creation:act', (_event, action: CreationAction) => creationReply(async () => {
+    await projectStore.get(validateProjectId(action?.projectId));
+    return creationService.act(action);
+  }));
+  handle('noobi:creation:preview', (_event, projectId: string, versionId: string) => creationReply(async () => {
+    const workflow = await creationService.get(validateProjectId(projectId));
+    if (!workflow) throw new CreationError('NOT_FOUND', '未找到创作记录。');
+    return creationGenerator.preview(workflow, versionId);
+  }));
   handle('noobi:bootstrap', async (): Promise<BootstrapPayload> => {
     const projects = await projectStore.list();
     const settings = await projectStore.getSettings();
@@ -514,6 +647,20 @@ function bindIpc(): void {
     const selectedProjectDirectory = await resolveEmptyProjectDirectory(projectDirectory);
     const projectName = basename(selectedProjectDirectory).trim().slice(0, 100);
     if (!projectName) throw new Error('请选择游戏项目文件夹');
+    if (input.stagedCreation === true) {
+      for (const attachment of attachments.paths) {
+        if (!/\.(png|jpe?g|webp)$/iu.test(attachment) || (await stat(attachment)).size > 10 * 1024 * 1024) {
+          throw new Error('参考图仅支持 PNG、JPEG、WebP，单张不超过 10 MB。');
+        }
+      }
+      const project = await projectStore.create({ name: projectName, idea: input.idea,
+        projectDirectory: selectedProjectDirectory, model: input.model, engine: 'godot' });
+      creationProjectIds.add(project.id);
+      await creationService.create(project.id, input.idea);
+      if (attachments.paths.length) await importInitialProjectAttachments(project, attachments.paths);
+      broadcast('noobi:event:project', project);
+      return project;
+    }
     const [settings, godot] = await Promise.all([
       projectStore.getSettings(),
       godotEnvironmentService.refresh(),
@@ -647,6 +794,7 @@ function bindIpc(): void {
 
   handle('noobi:project:run', async (_event, input: RunProjectInput) => {
     validateRunInput(input);
+    if (creationProjectIds.has(input.projectId)) throw new Error('请通过阶段成果区继续制作，避免跳过确认。');
     let project = await projectStore.get(input.projectId);
     if (isProjectBusyForMutation(project.id)) {
       throw new Error('该项目已有正在执行或启动中的 Agent');
@@ -1443,6 +1591,8 @@ async function executeHarness(
           audioGenerationRequirement.state !== 'not-required',
         );
       },
+      hostReviewFirst: true,
+      beforeWrite: () => archiveCurrentReviewEvidence(project.root),
       validateHostDelivery: (signal) => validateProjectDelivery(
         project,
         audioGenerationRequirement.state !== 'not-required',
@@ -1482,7 +1632,7 @@ function isProjectBusyForMutation(
     ignoreDeletionReservation?: boolean;
   } = {},
 ): boolean {
-  return harness.isRunning(projectId)
+  return creationRunningIds.has(projectId) || harness.isRunning(projectId)
     || (!options.ignoreRunReservation && projectRunReservations.has(projectId))
     || (!options.ignoreDeletionReservation && projectDeletionReservations.has(projectId))
     || experienceEvaluationRuns.has(projectId)
@@ -1632,6 +1782,8 @@ async function validateProjectDelivery(
   project: ProjectRecord,
   requireGeneratedAudio: boolean,
   signal: AbortSignal,
+  scope: 'preview' | 'game' = 'game',
+  assetScope?: { paths: string[]; since: string },
 ): Promise<HostDeliveryValidation> {
   const findings: string[] = [];
   let productionBuildReady = true;
@@ -1673,7 +1825,7 @@ async function validateProjectDelivery(
   try {
     const assetPlans = await assetPlanStore.reconcile(project.id, project.root, assets);
     broadcast('noobi:event:asset-plans', { projectId: project.id, assetPlans });
-    const unresolvedRequired = assetPlans.filter((plan) => plan.required && plan.status !== 'ready');
+    const unresolvedRequired = assetPlans.filter((plan) => plan.required && plan.status !== 'ready' && assetPlanIsInScope(plan, assetScope));
     if (unresolvedRequired.length > 0) {
       findings.push(
         'ASSET_PLANS: 以下必需素材工单尚未完成并接入生产代码：'
@@ -1758,7 +1910,7 @@ async function validateProjectDelivery(
     }
   }
 
-  if (productionBuildReady) {
+  if (productionBuildReady && scope === 'game') {
     throwIfDeliveryAborted(signal);
     const experienceReport = await evaluateProjectExperience(project, {
       signal,
@@ -1775,14 +1927,20 @@ async function validateProjectDelivery(
           + '检查 artifacts/playtest/latest/report.json 及其截图，修复真实控制、反馈、动画、暂停/恢复、重开或运行错误，并保持 .noobi/playtest.json 与正式构建一致。',
       );
     }
-  } else {
+  } else if (!productionBuildReady) {
     await writeGameplayExperienceFailureReport(
       project.root,
       `${project.engine === 'godot' ? 'Godot' : 'Web'} 正式构建未通过，因此没有对旧构建执行体验评测。`,
     );
   }
 
-  return { ok: findings.length === 0, findings };
+  const evidence: string[] = [];
+  if (project.engine === 'godot') {
+    try { evidence.push(await currentEngineEvidence(project.root)); }
+    catch (error) { findings.push(`ENGINE_EVIDENCE: ${asError(error).message}`); }
+  }
+  if (productionBuildReady && scope === 'game') evidence.push('artifacts/playtest/latest/report.json');
+  return { ok: findings.length === 0, findings, evidence };
 }
 
 function throwIfDeliveryAborted(signal: AbortSignal): void {
@@ -1812,56 +1970,58 @@ async function verifyGodotProject(
     timestamp: new Date().toISOString(),
     method: 'godot/verify/started',
   });
-  const imported = await godotEnvironmentService.execute({
-    kind: 'import',
-    projectPath: project.root,
-  });
-  throwIfExperienceEvaluationAborted(signal);
-  assertGodotTask(imported, project.root, '资源导入');
+  await captureGodotChecks(project.root, (input) => godotEnvironmentService.execute(input), async (execute) => {
+    const imported = await execute({
+      kind: 'import',
+      projectPath: project.root,
+    });
+    throwIfExperienceEvaluationAborted(signal);
+    assertGodotTask(imported, project.root, '资源导入');
 
-  const validated = await godotEnvironmentService.execute({
-    kind: 'validate',
-    projectPath: project.root,
-  });
-  throwIfExperienceEvaluationAborted(signal);
-  assertGodotTask(validated, project.root, '场景与脚本检查');
+    const validated = await execute({
+      kind: 'validate',
+      projectPath: project.root,
+    });
+    throwIfExperienceEvaluationAborted(signal);
+    assertGodotTask(validated, project.root, '场景与脚本检查');
 
-  if (!exportWeb) {
+    if (!exportWeb) {
+      emitAgentEvent({
+        id: randomUUID(),
+        projectId: project.id,
+        kind: 'lifecycle',
+        title: 'Godot · 工程验证通过',
+        message: '资源导入和场景检查通过；安装精确匹配的 Web Export Templates 后即可生成预览。',
+        stage: 'verify',
+        timestamp: new Date().toISOString(),
+        method: 'godot/verify/completed-without-export',
+      });
+      return;
+    }
+
+    const outputPath = join(project.root, 'build', 'web', 'index.html');
+    throwIfExperienceEvaluationAborted(signal);
+    await mkdir(dirname(outputPath), { recursive: true, mode: 0o755 });
+    throwIfExperienceEvaluationAborted(signal);
+    const exported = await execute({
+      kind: 'export',
+      projectPath: project.root,
+      preset: 'Web',
+      outputPath,
+    });
+    throwIfExperienceEvaluationAborted(signal);
+    assertGodotTask(exported, project.root, 'Web 正式导出');
+
     emitAgentEvent({
       id: randomUUID(),
       projectId: project.id,
       kind: 'lifecycle',
-      title: 'Godot · 工程验证通过',
-      message: '资源导入和场景检查通过；安装精确匹配的 Web Export Templates 后即可生成预览。',
+      title: 'Godot · 验证通过',
+      message: `资源导入、场景检查和 Web 导出通过；已验证 ${exported.artifacts.length} 个构建产物。`,
       stage: 'verify',
       timestamp: new Date().toISOString(),
-      method: 'godot/verify/completed-without-export',
+      method: 'godot/verify/completed',
     });
-    return;
-  }
-
-  const outputPath = join(project.root, 'build', 'web', 'index.html');
-  throwIfExperienceEvaluationAborted(signal);
-  await mkdir(dirname(outputPath), { recursive: true, mode: 0o755 });
-  throwIfExperienceEvaluationAborted(signal);
-  const exported = await godotEnvironmentService.execute({
-    kind: 'export',
-    projectPath: project.root,
-    preset: 'Web',
-    outputPath,
-  });
-  throwIfExperienceEvaluationAborted(signal);
-  assertGodotTask(exported, project.root, 'Web 正式导出');
-
-  emitAgentEvent({
-    id: randomUUID(),
-    projectId: project.id,
-    kind: 'lifecycle',
-    title: 'Godot · 验证通过',
-    message: `资源导入、场景检查和 Web 导出通过；已验证 ${exported.artifacts.length} 个构建产物。`,
-    stage: 'verify',
-    timestamp: new Date().toISOString(),
-    method: 'godot/verify/completed',
   });
 }
 
@@ -1984,7 +2144,7 @@ async function ingestGeneratedImage(
   const project = await projectStore.get(projectId);
   const asset = await assetStore.ingestGeneratedImage({
     projectId,
-    root: project.root,
+    root: creationCandidateRoots.get(projectId) ?? project.root,
     sourcePath: canonicalSource,
     ...(readString(item.revisedPrompt) ? { prompt: readString(item.revisedPrompt)! } : {}),
     provider: 'codex-imagegen',
@@ -2009,7 +2169,7 @@ async function ingestGeneratedImage(
     const assetPlans = await assetPlanStore.list(projectId);
     broadcast('noobi:event:asset-plans', { projectId, assetPlans });
   }
-  const assets = await assetStore.list(projectId, project.root);
+  const assets = await assetStore.list(projectId, creationCandidateRoots.get(projectId) ?? project.root);
   broadcast('noobi:event:assets', { projectId, assets });
   emitAgentEvent({
     id: randomUUID(),
@@ -3054,9 +3214,9 @@ async function shutdown(): Promise<void> {
   for (const controller of manualExperienceControllers.values()) controller.abort();
   manualExperienceControllers.clear();
   const projects = projectStore ? await projectStore.list().catch(() => []) : [];
-  const stopRuns = Promise.allSettled(projects.map((project) => harness.stop(project.id)));
+  const stopRuns = Promise.allSettled([...projects.map((project) => harness.stop(project.id)), creationService?.stopAll()]);
   await Promise.race([stopRuns, delay(5_000)]);
-  await Promise.allSettled([previews.stopAll(), playtestPreviews.stopAll(), runtime.stop()]);
+  await Promise.allSettled([previews.stopAll(), playtestPreviews.stopAll(), creationPreviews.stopAll(), runtime.stop()]);
   await Promise.race([Promise.allSettled([...backgroundRuns]), delay(2_000)]);
   await projectStore?.list().catch(() => undefined);
   await eventLog?.flush().catch(() => undefined);

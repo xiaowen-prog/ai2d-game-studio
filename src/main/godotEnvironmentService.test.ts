@@ -17,6 +17,20 @@ afterEach(async () => {
 });
 
 describe('GodotEnvironmentService', () => {
+  it('finds macOS self-contained templates beside the app bundle', async () => {
+    const root = await temporaryRoot('noobi-godot-portable-');
+    const binary = await fakeExecutable(root, 'Godot.app/Contents/MacOS/Godot');
+    const templates = join(root, 'editor_data/export_templates/4.5.1.stable');
+    await mkdir(templates, { recursive: true });
+    await writeFile(join(templates, 'web_nothreads_release.zip'), 'web');
+    const service = new GodotEnvironmentService({ storageFile: join(root, 'settings.json'), platform: 'darwin',
+      environment: { NOOBI_GODOT_BIN: binary, PATH: '' }, homeDirectory: root,
+      processRunner: versionRunner('4.5.1.stable.official') });
+    const status = await service.init();
+    expect(status.exportTemplates.versionPath).toBe(await realpath(templates));
+    expect(status.exportTemplates.targets.web).toBe(true);
+  });
+
   it('requires the exact export-template version instead of accepting a nearby install', async () => {
     const root = await temporaryRoot('noobi-godot-mismatch-');
     const binary = await fakeExecutable(root, 'bin/godot');

@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import type { CreationAction, CreationWorkflow } from '../shared/creation.js';
 import type {
   AgentEvent,
   AppSettings,
@@ -40,6 +41,12 @@ function subscribe<T>(channel: string, listener: (payload: T) => void): () => vo
 }
 
 const api: NoobiApi = {
+  creation: {
+    get: (projectId: string) => ipcRenderer.invoke('noobi:creation:get', projectId),
+    act: (input: CreationAction) => ipcRenderer.invoke('noobi:creation:act', input),
+    preview: (projectId: string, versionId: string) => ipcRenderer.invoke('noobi:creation:preview', projectId, versionId),
+    onChanged: (listener: (workflow: CreationWorkflow) => void) => subscribe('noobi:event:creation', listener),
+  },
   bootstrap: () => ipcRenderer.invoke('noobi:bootstrap') as Promise<BootstrapPayload>,
   refreshRuntime: () => ipcRenderer.invoke('noobi:runtime:refresh') as Promise<RuntimeStatus>,
   startLogin: () => ipcRenderer.invoke('noobi:runtime:login') as Promise<LoginStartResult>,

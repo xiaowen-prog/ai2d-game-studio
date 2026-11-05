@@ -47,6 +47,8 @@ export interface MediaToolBrokerOptions {
   >;
   generationService?: Pick<MediaGenerationService, 'generate'>;
   resolveProject(threadId: string): Promise<MediaToolProject | null>;
+  inspectAsset?(project: MediaToolProject, asset: GameAssetRecord): Promise<{ inspectionPreview: string } | null>;
+  previewCharacterEdit?(project: MediaToolProject): Promise<unknown>;
   onAssetsChanged?(projectId: string, assets: GameAssetRecord[]): void | Promise<void>;
   onAssetPlansChanged?(projectId: string, assetPlans: AssetPlanRecord[]): void | Promise<void>;
   /** Main-process provenance hook; generated image proof must never come from the workspace manifest. */
@@ -59,6 +61,11 @@ export interface MediaToolBrokerOptions {
 
 const MAX_RESPONSE_BYTES = 32 * 1024;
 const MAX_LIST_LIMIT = 100;
+export const CHARACTER_EDIT_PREVIEW_TOOL: DynamicToolSpec = {
+  type: 'function', name: 'noobi_character_edit_preview',
+  description: 'Preview the final host-composited character edit from .noobi/stage-result.json and character-edit-region.json. Returns image and mask preview paths. Does not generate images, approve, save versions or change the manifest. Available only during a selected character edit, at most 3 times.',
+  inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+};
 const KINDS = ['image', 'audio', 'model3d'] as const;
 const AUDIO_PURPOSES = ['music', 'speech', 'vocal-sfx', 'sfx', 'ambience'] as const;
 const VISUAL_ASSET_ROLES = [
@@ -243,6 +250,11 @@ export class MediaToolBroker {
 
       let payload: unknown;
       switch (params.tool) {
+        case 'noobi_character_edit_preview':
+          assertOnlyKeys(objectArguments(params.arguments), []);
+          if (!this.#options.previewCharacterEdit) throw new ToolInputError('Character edit preview is unavailable');
+          payload = await this.#options.previewCharacterEdit(project);
+          break;
         case 'noobi_asset_list':
           payload = await this.#list(project, params.arguments);
           break;
@@ -324,7 +336,8 @@ export class MediaToolBroker {
     const matching = kind ? allAssets.filter((asset) => asset.kind === kind) : allAssets;
     const assets: Array<Record<string, unknown>> = [];
     for (const asset of matching.slice(0, limit)) {
-      const next = [...assets, publicAsset(asset)];
+      const inspection = await this.#options.inspectAsset?.(project, asset);
+      const next = [...assets, { ...publicAsset(asset), ...inspection }];
       const candidate = {
         total: matching.length,
         shown: next.length,

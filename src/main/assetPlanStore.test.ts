@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { GameAssetRecord } from '../shared/contracts.js';
-import { AssetPlanStore } from './assetPlanStore.js';
+import { AssetPlanStore, assetPlanIsInScope } from './assetPlanStore.js';
 import * as attestation from './imageGenerationAttestation.js';
 
 const roots: string[] = [];
@@ -15,6 +15,31 @@ afterEach(async () => {
 });
 
 describe('AssetPlanStore', () => {
+  it('repeated reconciliation does not reactivate a replaced background, but keeps current and newly requested plans', async () => {
+    const fixture = await makeFixture();
+    const store = new AssetPlanStore(fixture.storageFile); await store.init();
+    const clock = vi.spyOn(Date.prototype, 'toISOString').mockReturnValue('2026-11-05T01:00:00.000Z');
+    await store.upsert({ id:'bamboo', projectId:'project-1', name:'Bamboo', kind:'image', prompt:'bamboo' });
+    const old = fakeAsset({id:'bamboo',relativePath:'public/assets/images/bamboo.png'});
+    await store.generated('project-1','bamboo',old,'codex-imagegen');
+    await mkdir(join(fixture.root,'src'),{recursive:true});
+    await writeFile(join(fixture.root,'src/scene.ts'),"const background='/assets/images/bamboo.png';");
+    expect((await store.reconcile('project-1',fixture.root,[old]))[0].status).toBe('ready');
+    const scope={paths:['public/assets/images/snow.png'],since:'2026-11-05T02:00:00.000Z'};
+    clock.mockReturnValue('2026-11-05T03:00:00.000Z');
+    await writeFile(join(fixture.root,'src/scene.ts'),"const background='/assets/images/snow.png';");
+    await store.upsert({id:'snow',projectId:'project-1',name:'Snow',kind:'image',prompt:'snow'});
+    for(let i=0;i<2;i++) {
+      const plans=await store.reconcile('project-1',fixture.root,[old]);
+      const replaced=plans.find(p=>p.id==='bamboo')!;
+      expect(replaced.status).toBe('generated'); expect(replaced.updatedAt>=scope.since).toBe(true);
+      expect(assetPlanIsInScope(replaced,scope)).toBe(false);
+      expect(assetPlanIsInScope(replaced,{...scope,paths:[old.relativePath]})).toBe(true);
+      expect(assetPlanIsInScope(replaced)).toBe(true); // Full game gate remains strict.
+      expect(plans.filter(p=>assetPlanIsInScope(p,scope)&&p.status!=='ready').map(p=>p.id)).toEqual(['snow']);
+    }
+  });
+
   it('persists expected assets separately from the public asset manifest', async () => {
     const fixture = await makeFixture();
     const store = new AssetPlanStore(fixture.storageFile);

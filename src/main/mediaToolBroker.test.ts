@@ -25,6 +25,23 @@ afterEach(async () => {
 });
 
 describe('media tool broker', () => {
+  it('routes character edit previews only through the active project callback and rejects extra arguments', async () => {
+    const responses: Array<{ id: string | number; result: unknown }> = [];
+    const project = { id: 'character-project', root: '/workspace' };
+    const preview = vi.fn(async () => ({ preview: '.noobi/inspection/preview.png' }));
+    const broker = new MediaToolBroker({
+      server: { respondToServerRequest: (id, result) => { responses.push({ id, result }); } } as Pick<CodexAppServer, 'respondToServerRequest'>,
+      assetStore: new AssetStore(), resolveProject: async () => project, previewCharacterEdit: preview,
+    });
+    broker.handle(toolRequest(1, 'noobi_character_edit_preview', {}));
+    await vi.waitFor(() => expect(responses).toHaveLength(1));
+    expect(preview).toHaveBeenCalledWith(project);
+    expect(readToolResponse(responses[0]!.result)).toMatchObject({ success: true, payload: { preview: '.noobi/inspection/preview.png' } });
+    broker.handle(toolRequest(2, 'noobi_character_edit_preview', { root: '/other-project' }));
+    await vi.waitFor(() => expect(responses).toHaveLength(2));
+    expect(readToolResponse(responses[1]!.result).success).toBe(false);
+    expect(preview).toHaveBeenCalledTimes(1);
+  });
   it('publishes bounded top-level asset and generation function tools', () => {
     expect(MEDIA_DYNAMIC_TOOLS.map((tool) => tool.type)).toEqual(Array(7).fill('function'));
     expect(MEDIA_DYNAMIC_TOOLS.map((tool) => tool.name)).toEqual([
