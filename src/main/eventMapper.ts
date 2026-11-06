@@ -64,12 +64,21 @@ export function notificationToEvent(
     case 'item/completed': {
       const type = readString(item?.type) ?? 'item';
       const completed = method === 'item/completed';
+      if (type === 'contextCompaction') {
+        title = `${roleName} · 上下文${completed ? '已整理' : '整理中'}`;
+        message = completed ? '历史上下文已压缩，继续当前制作步骤。' : '正在整理历史上下文，当前制作步骤不变。';
+        break;
+      }
       const presentation = describeItem(item, type);
       kind = presentation.kind;
       title = `${roleName} · ${presentation.title}`;
       message = presentation.message || (completed ? '已完成' : '已开始');
       break;
     }
+    case 'thread/compacted':
+      title = `${roleName} · 上下文已整理`;
+      message = 'Codex 已压缩本线程的历史上下文，当前制作步骤不变。';
+      break;
     case 'turn/started':
       title = `${roleName} · 回合开始`;
       message = 'Codex 已开始处理当前任务';

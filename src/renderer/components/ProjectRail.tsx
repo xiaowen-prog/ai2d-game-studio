@@ -148,11 +148,11 @@ export function ProjectRail({
                 <PanelLeftOpen className="brand-toggle-icon" size={19} aria-hidden="true" />
               </button>
             ) : (
-              <div className="brand is-static" aria-label="Noobi.ai">
-                <span className="brand-monogram" aria-hidden="true">N</span>
+              <div className="brand is-static" aria-label="造境">
+                <span className="brand-monogram" aria-hidden="true">造</span>
                 <span className="brand-copy">
-                  <strong>Noobi.ai</strong>
-                  <small>AI GAME STUDIO</small>
+                  <strong>造境</strong>
+                  <small>AI 游戏制作台</small>
                 </span>
               </div>
             )
@@ -164,10 +164,10 @@ export function ProjectRail({
               title={collapsed ? '展开首页侧栏' : '返回首页'}
               onClick={collapsed ? onToggleCollapse : onHome}
             >
-              {collapsed ? <span className="brand-monogram" aria-hidden="true">N</span> : null}
+              {collapsed ? <span className="brand-monogram" aria-hidden="true">造</span> : null}
               <span className="brand-copy">
-                <strong>Noobi.ai</strong>
-                <small>AI GAME STUDIO</small>
+                <strong>造境</strong>
+                <small>AI 游戏制作台</small>
               </span>
             </button>
           )}
@@ -193,7 +193,7 @@ export function ProjectRail({
           </button>
         </div>
 
-        <nav className="rail-primary-navigation" aria-label="Noobi 导航">
+        <nav className="rail-primary-navigation" aria-label="造境导航">
           <button className={variant === 'dashboard' ? 'is-active' : ''} type="button" onClick={onHome}>
             <Home size={17} />
             <span>首页</span>

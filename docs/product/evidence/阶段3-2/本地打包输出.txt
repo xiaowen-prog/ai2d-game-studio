@@ -1,0 +1,9 @@
+  • electron-builder  version=26.15.3 os=25.5.0
+  • loaded configuration  file=package.json ("build" field)
+  • skipped dependencies rebuild  reason=npmRebuild is set to false
+  • packaging       platform=darwin arch=arm64 electron=43.3.0 appOutDir=release/mac-arm64
+  • using custom unpacked Electron distribution  electronDist=node_modules/electron/dist
+  • copying unpacked Electron  source=/Users/mima1234/Documents/个人项目-复盘/个人项目-aigc/个人项目-game/Noobi.ai/node_modules/electron/dist/Electron.app destination=/Users/mima1234/Documents/个人项目-复盘/个人项目-aigc/个人项目-game/Noobi.ai/release/mac-arm64/Electron.app
+  • searching for node modules  pm=npm searchDir=/Users/mima1234/Documents/个人项目-复盘/个人项目-aigc/个人项目-game/Noobi.ai
+  • signing         file=release/mac-arm64/AI 2D Game Studio.app platform=darwin type=distribution identityName=- identityHash=none provisioningProfile=none
+  • skipped macOS notarization  reason=`notarize` options were set explicitly `false`

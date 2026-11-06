@@ -1,6 +1,6 @@
 import { randomUUID, createHash } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile, unlink } from 'node:fs/promises';
-import { isAbsolute, join } from 'node:path';
+import { mkdir, readFile, rename, open, unlink } from 'node:fs/promises';
+import { isAbsolute, join, resolve } from 'node:path';
 import {
   CREATION_STAGES, affectedStages, isCreationStage,
   type CreationAction, type CreationArtifact, type CreationCheckpoint,
@@ -30,14 +30,14 @@ export function newCreation(projectId: string, idea: string): CreationWorkflow {
 }
 
 /** Private host store: never placed in the Agent's writable game workspace. */
+const workflowWrites = new Map<string, Promise<unknown>>();
 export class CreationWorkflowStore {
-  #tails = new Map<string, Promise<unknown>>();
   constructor(readonly directory: string) {
     if (!isAbsolute(directory)) throw new Error('Creation storage must be absolute');
   }
   async get(projectId: string): Promise<CreationWorkflow | null> {
     assertCreationId(projectId);
-    await this.#tails.get(projectId)?.catch(() => undefined);
+    await workflowWrites.get(resolve(this.directory, `${projectId}.json`))?.catch(() => undefined);
     return this.#read(projectId);
   }
   async create(projectId: string, idea: string): Promise<CreationWorkflow> {
@@ -89,15 +89,20 @@ export class CreationWorkflowStore {
     const destination = join(this.directory, `${workflow.projectId}.json`);
     const temporary = `${destination}.${creationId()}.tmp`;
     try {
-      await writeFile(temporary, JSON.stringify(workflow, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
+      const file = await open(temporary, 'wx', 0o600);
+      try {
+        await file.writeFile(JSON.stringify(workflow, null, 2) + '\n');
+        await file.sync();
+      } finally { await file.close(); }
       await rename(temporary, destination);
     } finally { await unlink(temporary).catch(() => undefined); }
   }
   #exclusive<T>(id: string, operation: () => Promise<T>): Promise<T> {
     assertCreationId(id);
-    const result = (this.#tails.get(id) ?? Promise.resolve()).catch(() => undefined).then(operation);
-    this.#tails.set(id, result);
-    void result.finally(() => { if (this.#tails.get(id) === result) this.#tails.delete(id); }).catch(() => undefined);
+    const key = resolve(this.directory, `${id}.json`);
+    const result = (workflowWrites.get(key) ?? Promise.resolve()).catch(() => undefined).then(operation);
+    workflowWrites.set(key, result);
+    void result.finally(() => { if (workflowWrites.get(key) === result) workflowWrites.delete(key); }).catch(() => undefined);
     return result;
   }
 }
@@ -142,13 +147,46 @@ export function assertWorkflow(value: unknown, projectId: string): asserts value
           }
         }
       }
-      if (step.artifact?.playable && (id !== 'playable' || !step.artifact.ready || !step.artifact.snapshotId || step.artifact.playable.genre !== 'platformer' || step.artifact.playable.manifest !== '.noobi/platformer-preview.json' || ![1, 2].includes(step.artifact.playable.maxJumps))) throw new Error('Invalid saved playable');
+      if (step.artifact?.playable) {
+        const playable = step.artifact.playable;
+        const valid = playable.genre === 'platformer'
+          ? playable.manifest === '.noobi/platformer-preview.json' && [1, 2].includes(playable.maxJumps)
+          : playable.genre === 'topdown' && playable.manifest === '.noobi/topdown-preview.json' && [0, 1].includes(playable.maxBounces);
+        if (id !== 'playable' || !step.artifact.ready || !step.artifact.snapshotId || !valid) throw new Error('Invalid saved playable');
+      }
       if (step.artifact?.scene) {
         const artifact = step.artifact;
         if (id !== 'scene' || !artifact.ready || !artifact.snapshotId || artifact.scene!.manifest !== '.noobi/scene-preview.json'
           || !['topdown', 'platformer'].includes(artifact.scene!.genre)
           || !/^public\/assets\/images\/[^/]+\.png$/u.test(artifact.scene!.background)
           || !/^[a-f0-9]{64}$/u.test(artifact.lockedAssets[artifact.scene!.background] ?? '')) throw new Error('Invalid saved scene');
+      }
+      if (step.artifact?.round) {
+        const round = step.artifact.round;
+        const valid = round.genre === 'platformer'
+          ? round.manifest === '.noobi/platformer-round.json' && Number.isInteger(round.timeLimitSeconds)
+            && round.timeLimitSeconds >= 30 && round.timeLimitSeconds <= 300 && [1, 2].includes(round.maxJumps)
+          : round.genre === 'topdown' && round.manifest === '.noobi/topdown-round.json'
+            && Array.isArray(round.waveCounts) && round.waveCounts.length === 3
+            && round.waveCounts.every(count => Number.isInteger(count) && count >= 1 && count <= 12)
+            && Number.isInteger(round.playerHealth) && round.playerHealth >= 1 && round.playerHealth <= 20 && [0, 1].includes(round.maxBounces);
+        if (id !== 'game' || !step.artifact.ready || !step.artifact.snapshotId || !valid) {
+          throw new Error('Invalid saved complete round');
+        }
+      }
+      if (step.artifact?.appearanceChange) {
+        const change = step.artifact.appearanceChange;
+        const expected = change.target === 'character' ? ['character', 'scene', 'playable', 'game'] : ['scene', 'playable', 'game'];
+        if (id !== 'game' || !step.artifact.round || !['character', 'scene'].includes(change.target)
+          || JSON.stringify(change.stages) !== JSON.stringify(expected)) throw new Error('Invalid appearance revision');
+        assertCreationId(change.checkpointId);
+      }
+      if (step.artifact?.delivery) {
+        const delivery = step.artifact.delivery;
+        if (id !== 'delivery' || !step.artifact.ready || step.artifact.snapshotId !== delivery.sourceSnapshotId
+          || !Number.isInteger(delivery.fileCount) || delivery.fileCount < 1 || delivery.fileCount > 10_010
+          || !/^[a-f0-9]{64}$/u.test(delivery.manifestSha256) || !/^[a-f0-9]{64}$/u.test(delivery.archiveSha256)) throw new Error('Invalid delivery record');
+        for (const value of [delivery.bundleId, delivery.sourceVersionId, delivery.sourceSnapshotId]) assertCreationId(value);
       }
       if (step.artifact?.characterPhase === 'actions') {
         const artifact = step.artifact;
@@ -168,6 +206,11 @@ export function assertWorkflow(value: unknown, projectId: string): asserts value
     validateSteps(checkpoint.steps);
   }
   if (workflow.task?.characterPhase && !['candidates', 'actions'].includes(workflow.task.characterPhase)) throw new Error('Invalid character task');
+  if (workflow.task?.appearanceTarget) {
+    if (workflow.task.stage !== 'game' || !['character', 'scene'].includes(workflow.task.appearanceTarget)) throw new Error('Invalid appearance task');
+    assertCreationId(workflow.task.sourceCheckpointId);
+    if (!workflow.history.some(point => point.id === workflow.task!.sourceCheckpointId)) throw new Error('Missing appearance source');
+  }
   if (workflow.task && (!isCreationStage(workflow.task.stage) || !['running', 'succeeded', 'failed', 'stopped'].includes(workflow.task.state))) throw new Error('Invalid task');
 }
 

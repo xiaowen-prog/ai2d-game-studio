@@ -45,6 +45,7 @@ const api: NoobiApi = {
     get: (projectId: string) => ipcRenderer.invoke('noobi:creation:get', projectId),
     act: (input: CreationAction) => ipcRenderer.invoke('noobi:creation:act', input),
     preview: (projectId: string, versionId: string) => ipcRenderer.invoke('noobi:creation:preview', projectId, versionId),
+    revealDelivery: (projectId: string, versionId: string) => ipcRenderer.invoke('noobi:creation:reveal-delivery', projectId, versionId),
     onChanged: (listener: (workflow: CreationWorkflow) => void) => subscribe('noobi:event:creation', listener),
   },
   bootstrap: () => ipcRenderer.invoke('noobi:bootstrap') as Promise<BootstrapPayload>,

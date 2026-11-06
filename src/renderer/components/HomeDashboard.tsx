@@ -33,6 +33,7 @@ import { formatRelative, PROJECT_STATUS_LABELS } from '../ui';
 import { ModelPicker } from './ModelPicker';
 import { ProjectIconImage } from './ProjectIcon';
 import { RotatingIdeaInput } from './RotatingIdeaInput';
+import { HomeScene } from './HomeScene';
 import { isSendKey } from '../sendKey';
 
 const IDEA_STARTERS = [
@@ -103,7 +104,6 @@ export function HomeDashboard({
     () => models.find((item) => item.model === model) ?? models[0] ?? null,
     [model, models],
   );
-  const accountName = accountDisplayName(runtime);
   const runtimeReady = runtime.state === 'ready' && Boolean(runtime.account);
   const launchReady = idea.trim().length > 0 && !busy;
   useEffect(() => { try { localStorage.setItem('creation-home-idea', idea); } catch { /* Keep the current text in memory. */ } }, [idea]);
@@ -212,6 +212,7 @@ export function HomeDashboard({
         >
           <Menu size={18} />
         </button>
+        <span className="studio-brand"><span className="studio-brand-mark" aria-hidden="true" />造境</span>
         <div className="home-toolbar-actions">
           <button type="button" aria-label="切换主题" title="切换主题" onClick={onToggleTheme}>
             {settings.theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
@@ -228,15 +229,8 @@ export function HomeDashboard({
             <span className={`home-loop-status ${runtimeReady ? 'is-ready' : 'is-attention'}`}>
               <i /> {runtimeReady ? 'AI 已连接，可以开始' : '先连接 AI，想法可以先写'} <ArrowRight size={13} />
             </span>
-            <h1 id="home-title">今天想做什么游戏，{accountName}？</h1>
-            <p>说出你的 2D 游戏想法。AI 先整理方向卡，你可以修改、确认并保存。</p>
-            {!runtimeReady ? <section className="home-first-use" aria-label="首次使用指引">
-              <div><strong>{runtime.account ? 'AI 连接暂时不可用' : '第一次使用？先登录 Codex'}</strong>
-                <p>{runtime.account ? '打开账户设置检查连接，再回来发送。你的想法会保留。' : '用已有 ChatGPT 账号连接 AI，不需要写代码。登录后回来发送想法，AI 会先给你方向卡。'}</p>
-                <ol><li>打开账户设置</li><li>在官方页面完成登录</li><li>回来发送游戏想法</li></ol></div>
-              <button type="button" className="primary-button" onClick={() => onOpenSettings('account')}>{runtime.account ? '检查连接' : '去登录'}</button>
-            </section> : null}
-
+            <h1 id="home-title">把脑海里的世界，<wbr />做成能玩的游戏。</h1>
+            <p>从一句话开始。AI 分步制作，每一步都由你确认。</p>
             <div
               className={`home-prompt-card${dragActive ? ' is-dragging' : ''}`}
               onDragEnter={handleDragEnter}
@@ -274,6 +268,7 @@ export function HomeDashboard({
               />
               <RotatingIdeaInput
                 ref={ideaInputRef}
+                placeholder="例如：做一个 2D 俯视武侠游戏，白衣剑客在竹林里用剑气打怪"
                 value={idea}
                 busy={busy}
                 onChange={(event) => setIdea(event.target.value)}
@@ -347,20 +342,31 @@ export function HomeDashboard({
             </div>
 
             <small className="home-send-hint">Enter 发送 · Shift + Enter 换行 · 想法会自动保存</small>
+            {!runtimeReady ? <section className="home-first-use" aria-label="首次使用指引">
+              <div><strong>{runtime.account ? 'AI 连接暂时不可用' : '第一次使用？先登录 Codex'}</strong>
+                <p>{runtime.account ? '打开账户设置检查连接，再回来发送。你的想法会保留。' : '用已有 ChatGPT 账号连接 AI，不需要写代码。登录后回来发送想法，AI 会先给你方向卡。'}</p>
+                <ol><li>打开账户设置</li><li>在官方页面完成登录</li><li>回来发送游戏想法</li></ol></div>
+              <button type="button" className="primary-button" onClick={() => onOpenSettings('account')}>{runtime.account ? '检查连接' : '去登录'}</button>
+            </section> : null}
+            <p className="studio-home-scope">支持 2D 横版闯关和俯视打怪，题材不限</p>
             <div className="home-idea-starters" aria-label="游戏创意快捷选项">
               {IDEA_STARTERS.map((starter) => (
-                <button key={starter.label} type="button" onClick={() => setIdea(starter.prompt)}>
+                <button key={starter.label} type="button" onClick={() => {
+                  setIdea(starter.prompt);
+                  ideaInputRef.current?.focus();
+                }}>
                   {starter.label}
                 </button>
               ))}
             </div>
           </div>
+          <HomeScene />
         </section>
 
         <section className="home-projects" aria-labelledby="recent-projects-title">
           <header>
             <div>
-              <span>YOUR GAMES</span>
+              <span>你的作品</span>
               <h2 id="recent-projects-title">继续最近的制作</h2>
             </div>
             <button
@@ -433,11 +439,4 @@ function formatFileSize(size: number): string {
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${Math.ceil(size / 1024)} KB`;
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function accountDisplayName(runtime: RuntimeStatus): string {
-  const email = runtime.account?.email?.trim();
-  if (!email) return '创作者';
-  const local = email.split('@')[0]?.trim();
-  return local || '创作者';
 }

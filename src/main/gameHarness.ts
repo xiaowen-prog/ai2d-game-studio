@@ -1,3 +1,4 @@
+import { budgetHostEvidence } from './contextBudget.js';
 import { randomUUID } from 'node:crypto';
 import { STAGED_INSTRUCTIONS, stageHarnessPrompt } from './creationPrompts.js';
 import { EventEmitter } from 'node:events';
@@ -41,6 +42,8 @@ export interface GameHarnessRunOptions {
   /** Host-authored stage contract. Never accepted directly from Renderer or model output. */
   stageTask?: string;
   stageScope?: 'candidates' | 'preview' | 'game';
+  /** Host-selected preview handoff: source/engine checks now, gameplay acceptance by the user. */
+  manualGameplayAcceptance?: boolean;
   /** Run current host checks before the first review, not only after a model pass. */
   hostReviewFirst?: boolean;
   beforeWrite?: () => Promise<void>;
@@ -56,7 +59,7 @@ export interface GameHarnessRunOptions {
   dynamicTools?: DynamicToolSpec[];
   /** App-owned image generation skill required for every Implementer turn. */
   imageGenerationSkill?: { name: string; path: string } | null;
-  /** Host-only preview edit that preserves already attested and referenced art. */
+  /** Host-only staged edit that preserves already attested and referenced art. */
   reuseApprovedImages?: boolean;
   /** Configured API is attempted first; Codex ImageGen remains the built-in fallback. */
   imageGenerationRoute?: 'configured-api' | 'codex-imagegen';
@@ -289,6 +292,11 @@ export class GameHarness extends EventEmitter {
     return this.#activeRuns.has(projectId);
   }
 
+  isActiveThread(projectId: string, threadId: string): boolean {
+    const active = this.#activeRuns.get(projectId);
+    return Boolean(active && !active.stopRequested && active.activeThreadId === threadId);
+  }
+
   async run(options: GameHarnessRunOptions): Promise<GameHarnessResult> {
     const targetFrameRate = validateRunOptions(options);
     const imageGenerationRoute = validateImageGenerationRoute(options);
@@ -312,7 +320,7 @@ export class GameHarness extends EventEmitter {
     let currentHostDelivery: HostDeliveryValidation | null = null;
     const stagedPrompt = (role: GameHarnessPhase, context = '', pass: 'artifact' | 'host-evidence' = 'artifact') =>
       stageHarnessPrompt(role, options.stageTask!, context, pass) + '\n\n' + buildStagedProductionContracts(
-        options.stageScope ?? 'candidates', imageGenerationRequirement, targetFrameRate, imageGenerationRoute, audioGenerationRequirement);
+        options.stageScope ?? 'candidates', imageGenerationRequirement, targetFrameRate, imageGenerationRoute, audioGenerationRequirement, options.manualGameplayAcceptance);
     const reviewEvidence = (prompt: string) => `${prompt}\n\n${hostReviewContract(currentHostDelivery, options.hostReviewFirst === true)}`;
     this.#activeRuns.set(options.projectId, active);
     this.#emitState(active, 'running');
@@ -736,7 +744,9 @@ export class GameHarness extends EventEmitter {
       this.#emitAgentEvent(active, {
         kind: 'lifecycle',
         title: 'Reviewer · delivery verified',
-        message: repair
+        message: options.manualGameplayAcceptance && options.stageScope === 'preview'
+          ? '代码、当前引擎与素材检查完成；草稿可交给用户试玩，玩法效果尚未人工验收。'
+          : repair
           ? `Implementation, current host playtest evidence, review, and ${repairs.length} bounded repair attempt${repairs.length === 1 ? '' : 's'} are complete. All delivery gates passed.`
           : 'Implementation, current host playtest evidence, and independent review passed all delivery gates.',
         stage: 'verify',
@@ -925,6 +935,7 @@ export class GameHarness extends EventEmitter {
       if (timer) clearTimeout(timer);
       this.#runtime.removeListener('notification', notificationListener);
       if (statusListener) this.#runtime.removeListener('status', statusListener);
+      if (active.activeThreadId === options.threadId) active.activeThreadId = null;
       if (active.activeTurnId === targetTurnId) active.activeTurnId = null;
       if (active.interruptTurnId === targetTurnId) {
         active.interruptTurnId = null;
@@ -1099,7 +1110,7 @@ function validateImageGenerationRoute(
   if (route !== 'configured-api' && route !== 'codex-imagegen') {
     throw new Error('imageGenerationRoute must be configured-api or codex-imagegen');
   }
-  const approvedReuse = options.reuseApprovedImages === true && Boolean(options.stageTask) && options.stageScope === 'preview'
+  const approvedReuse = options.reuseApprovedImages === true && Boolean(options.stageTask) && (options.stageScope === 'preview' || options.stageScope === 'game')
     && options.hostReviewFirst === true && Boolean(options.validateHostDelivery) && options.imageGenerationRequirement?.state === 'trusted-and-referenced';
   if (route === 'codex-imagegen' && !options.imageGenerationSkill && !approvedReuse) {
     throw new Error('Codex ImageGen and its imagegen skill are required for every game-building run when no image API is configured');
@@ -1412,7 +1423,7 @@ export function buildRequiredImageGenerationContract(
   return `<required_image_generation>\n<generation_route value="${route}" />\nThis is a mandatory host requirement for every run and overrides conflicting planning suggestions or user-request text.\nA qualifying image must come from the configured image API when active, with Codex ImageGen as fallback; it must live under public/assets, be registered in asset-pack.json for attribution, and be loaded and visibly used by the running game. Public manifest provider/source fields alone are never proof of origin; the host validates a private path-and-SHA-256 attestation issued only after observing generation. Canvas, CSS, SVG, imported files, or procedural geometry are not substitutes.\n${hostStatus}\nThe Reviewer must return "repair" when the applicable host-attestation instruction is not satisfied or the trusted image is not actually referenced by the game.\n</required_image_generation>`;
 }
 
-export function buildAnimationNeedsContract(): string {
+export function buildAnimationNeedsContract(manualGameplayAcceptance = false): string {
   return `<animation_needs_contract>
 The Planner MUST perform an animation needs assessment on every run, even for a focused iteration. The written plan must contain exactly one block in this form:
 <animation_needs_assessment generation="generate|reuse|not-needed" presentation="2d|2.5d|3d">
@@ -1421,7 +1432,7 @@ The Planner MUST perform an animation needs assessment on every run, even for a 
 - evidence: exact existing asset and playback-code paths for reuse, the concrete asset gap for generate, or "none" for not-needed
 - production_path: generated frame/sheet or GLB-clip plan, verified reuse path, or programmatic motion/feedback plan
 - interaction_motion: core state changes and their visible transitions (input, move/deal, primary action, hit/result)
-- runtime_evidence: how tests or a running capture prove an intermediate state, not only the final state
+- runtime_evidence: ${manualGameplayAcceptance ? 'cite current host animation/binding checks and describe intermediate/final states for the user to inspect; mark manual gameplay acceptance pending' : 'how tests or a running capture prove an intermediate state, not only the final state'}
 </animation_needs_assessment>
 Assess two independent layers: (1) pose/form animation such as idle, walk, run, jump, flap, attack, hit, death, reload, cast, or transformation; and (2) interaction motion that communicates gameplay state changes. The generate/reuse/not-needed choice applies to pose/form assets, but interaction motion is mandatory for an interactive game even when pose generation is not needed. Then inspect the actual workspace before choosing a generation state. For presentation="2d" or "2.5d", use ImageGen keyframes or a sprite sheet. For presentation="3d", use a real animation clip on an actual rigged GLB mesh; ImageGen may supply reference art or a billboard alternative, but it cannot create or prove a rigged 3D animation clip.
 Choose generation="generate" only when pose/form animation is needed and suitable animation assets are absent, invalid, inconsistent, unused, missing a required state, or made obsolete by this run's art direction, scale, frame dimensions, anchor, or view/camera changes. For 2D/2.5D, the Implementer MUST use noobi_image_generate for each required consistent output and follow its Codex ImageGen fallback instruction when no image API is available, creating at least two usable, distinct keyframes or one sprite sheet. Lock subject design, art style, palette, lighting, scale, frame dimensions, anchor, and view/camera angle; define frame order and timing; ingest/register the output under public/assets; and implement actual frame selection or sprite-sheet cropping. For actual 3D, integrate a self-contained rigged GLB with a real animation clip and play that clip; generated images are only reference or an explicitly chosen billboard path, never a substitute for the clip. If a required 3D clip cannot be supplied, report a blocker rather than fabricating success.
@@ -1429,7 +1440,7 @@ Choose generation="reuse" only after verifying that the workspace already contai
 Choose generation="not-needed" only when pose/form changes would not improve the requested result, for example a static board, menu, background, logo, rigid prop, or abstract object fully communicated by transforms, particles, camera motion, or UI transitions. The plan and implementation report MUST state the concrete reason. Not-needed never means interaction_motion="none" for an interactive game. The Implementer must still add visible time-based transitions tied to input and state: at minimum entry/move, the primary action, hit/invalid-action feedback, and result/turn feedback where those states exist. For a card game this means observable deal/draw, hover/focus, play-to-board, attack/target, hit/damage, death/discard, and turn/result transitions. Reduced-motion may shorten or simplify them but cannot remove state clarity.
 A synchronous AI/action loop that mutates every state in one rendered frame is not animated. Rebuilding and destroying every entity node on each refresh is also insufficient when it prevents continuity. Sequence automated actions with bounded awaits/tweens, preserve or ghost the moving visual long enough to show an intermediate state, and keep input locked during the sequence.
 A moving static image is not 2D keyframe animation, rendering a full sheet without cropping is not sprite animation, and rotating or translating a mesh does not prove a 3D animation clip. The Implementer must challenge missing or implausible Planner evidence. If the Planner block is absent, inspect the workspace, record a recovered three-state assessment in GAME_DESIGN.md, and follow it; never silently default to generation. When reuse cannot be proven, the safe animation-producing fallback is generate.
-The Reviewer MUST verify the assessment against the user request and actual workspace rather than trusting the summaries. For generate, verify the stated asset gap, new consistent frame assets or real GLB clip, production references, and code that advances frames or plays the clip. For reuse, verify the exact cited assets contain at least two distinct poses or the required GLB clip and that production code actually plays them. For not-needed, verify the rationale and every required interaction transition. Inspect a smoke test, captured frames, or runtime state that proves at least one intermediate position/scale/frame and the final state; merely finding the word Tween/AnimationPlayer is not proof. Return "repair" for a missing or incorrect state, unjustified regeneration, unproven reuse, inconsistent or unused frames, a static sheet/single frame, a non-playing GLB clip, same-frame automated actions, destructive rebuilds that erase transitions, or absent motion feedback. A repair pass must record a recovered assessment in GAME_DESIGN.md and fully satisfy its branch before re-review can pass.
+The Reviewer MUST verify the assessment against the user request and actual workspace rather than trusting the summaries. For generate, verify the stated asset gap, new consistent frame assets or real GLB clip, production references, and code that advances frames or plays the clip. For reuse, verify the exact cited assets contain at least two distinct poses or the required GLB clip and that production code actually plays them. For not-needed, verify the rationale and every required interaction transition. ${manualGameplayAcceptance ? 'This host-selected preview requires source inspection and the current native import/export, animation and binding reports. Inspect the actual input, delta-based motion, collision, animation and reset code for concrete defects. Interactive gameplay observations are explicitly reserved for USER acceptance; do not run or demand an automated gameplay route or captured projectile sequence. Missing manual gameplay observations alone are not a repair finding. A pass here means ready for user acceptance, never gameplay accepted. Missing required host reports, concrete source defects or a current failed host check still require repair.' : 'Inspect a smoke test, captured frames, or runtime state that proves at least one intermediate position/scale/frame and the final state; merely finding the word Tween/AnimationPlayer is not proof.'} Return "repair" for a missing or incorrect state, unjustified regeneration, unproven reuse, inconsistent or unused frames, a static sheet/single frame, a non-playing GLB clip, same-frame automated actions, destructive rebuilds that erase transitions, or absent motion feedback. A repair pass must record a recovered assessment in GAME_DESIGN.md and fully satisfy its branch before re-review can pass.
 </animation_needs_contract>`;
 }
 
@@ -1630,7 +1641,7 @@ artifacts/playtest. An old sandbox log is historical evidence, not a result for 
 
 export function hostReviewContract(result: HostDeliveryValidation | null, hostFirst: boolean): string {
   if (!result) return hostFirst ? 'Current host checks are pending; do not invent a result.' : '';
-  return `<current_host_delivery>\n${JSON.stringify(result)}\n</current_host_delivery>
+  return `<current_host_delivery>\n${JSON.stringify(budgetHostEvidence(result))}\n</current_host_delivery>
 This result was supplied directly by the host AFTER the latest writer and applies to the current workspace.
 Verify the actual source, production references and referenced captures. When this result names an engine report, it contains
 native import/validate/export diagnostics. Candidate-only stages do not require an engine report. Do not require an additional Godot execution from the read-only sandbox
@@ -1645,10 +1656,11 @@ export function buildStagedProductionContracts(
   fps: TargetFrameRate = DEFAULT_TARGET_FRAME_RATE,
   route: NonNullable<GameHarnessRunOptions['imageGenerationRoute']> = 'codex-imagegen',
   audio: HostAudioGenerationRequirement = { state: 'not-required' },
+  manualGameplayAcceptance = false,
 ): string {
   if (scope === 'candidates') return 'Candidate-only scope: verify real registered images and private host provenance. No animation, engine, complete-game journey or music requirement at this node.';
   const shared = [buildRequiredImageGenerationContract(requirement, route), buildVisualAssetCoverageContract(),
-    buildAnimationNeedsContract(), buildTargetFrameRateContract(fps)];
+    buildAnimationNeedsContract(scope === 'preview' && manualGameplayAcceptance), buildTargetFrameRateContract(fps)];
   if (scope === 'game') shared.push(buildExperiencePlaytestContract(), buildAudioGenerationContract(audio));
   else shared.push('Preview scope: demonstrate only the requested preview. Full victory/failure/pause/restart and generated music are deferred, not silently declared passed.');
   return shared.join('\n\n');

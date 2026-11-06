@@ -631,16 +631,17 @@ describe('game harness required ImageGen contract', () => {
     expect(runtime.turns).toHaveLength(0);
   });
 
-  it('allows a scoped code-only preview with privately attested art and still requires host checks', async () => {
+  it.each(['preview', 'game'] as const)('allows scoped %s reuse of privately attested art only with current host checks', async (stageScope) => {
     const runtime = new CapturingRuntime(['plan', 'implemented', '{"verdict":"pass","summary":"checked","findings":[]}']);
     const harness = new GameHarness(runtime as unknown as CodexAppServer);
-    const options = { projectId:'reuse', cwd:'/tmp/reuse', prompt:'double jump', stageTask:'Keep approved art', stageScope:'preview' as const, hostReviewFirst:true,
+    const options = { projectId:'reuse', cwd:'/tmp/reuse', prompt:'double jump', stageTask:'Keep approved art', stageScope, hostReviewFirst:true,
       reuseApprovedImages:true, imageGenerationRequirement:{state:'trusted-and-referenced' as const,relativePath:'public/assets/images/hero.png'},
       validateHostDelivery: async()=>({ok:true,findings:[]}) };
     await harness.run(options); expect(runtime.turns).toHaveLength(3);
     expect(runtime.turns[1].skills).toBeUndefined();
     await expect(harness.run({...options, imageGenerationRequirement:{state:'fresh-generation-required'}})).rejects.toThrow('required for every game-building run');
-    await expect(harness.run({...options, stageScope:'game'})).rejects.toThrow('required for every game-building run');
+    await expect(harness.run({...options, validateHostDelivery: undefined})).rejects.toThrow('required for every game-building run');
+    await expect(harness.run({...options, hostReviewFirst: false})).rejects.toThrow('required for every game-building run');
     expect(runtime.turns).toHaveLength(3);
   });
 

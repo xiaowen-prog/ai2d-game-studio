@@ -80,7 +80,7 @@ export class AssetPlanStore {
       const now = new Date().toISOString();
       let recovered = false;
       this.#plans = this.#plans.map((plan) => {
-        if (plan.status !== 'generating') return plan;
+        if (plan.status !== 'generating' && plan.status !== 'queued') return plan;
         recovered = true;
         return {
           ...plan,

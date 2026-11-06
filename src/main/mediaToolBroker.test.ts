@@ -25,6 +25,45 @@ afterEach(async () => {
 });
 
 describe('media tool broker', () => {
+  it('keeps an in-flight tool reserved until its writer actually settles', async () => {
+    let finish!: () => void;
+    const gate = new Promise<void>(resolve => { finish = resolve; });
+    const broker = new MediaToolBroker({
+      server: { respondToServerRequest: () => {} }, assetStore: new AssetStore(),
+      resolveProject: async () => ({ id: 'p', root: '/unused' }),
+      previewCharacterEdit: async () => { await gate; return { preview: 'saved' }; },
+    });
+    broker.handle(toolRequest(20, 'noobi_character_edit_preview', {}));
+    await vi.waitFor(() => expect(broker.isRunning('p')).toBe(true));
+    let settled = false;
+    const pending = broker.waitForProject('p').then(() => { settled = true; });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    finish();
+    await pending;
+    expect(broker.isRunning('p')).toBe(false);
+  });
+  it('blocks a tool before execution and isolates a broken post-tool observer', async () => {
+    const responses: Array<{ id: string | number; result: unknown }> = [];
+    const preview = vi.fn(async () => ({ preview: 'local-preview' }));
+    const before = vi.fn().mockRejectedValueOnce(new Error('private-policy-secret')).mockResolvedValue(undefined);
+    const after = vi.fn(async () => { throw new Error('observer error'); });
+    const broker = new MediaToolBroker({
+      server: { respondToServerRequest: (id, result) => { responses.push({ id, result }); } },
+      assetStore: new AssetStore(), resolveProject: async () => ({ id: 'p', root: '/unused' }),
+      previewCharacterEdit: preview, hooks: { before, after },
+    });
+    broker.handle(toolRequest(21, 'noobi_character_edit_preview', {}));
+    await vi.waitFor(() => expect(responses).toHaveLength(1));
+    expect(preview).not.toHaveBeenCalled();
+    expect(readToolResponse(responses[0]!.result).success).toBe(false);
+    expect(JSON.stringify(responses)).not.toContain('private-policy-secret');
+    broker.handle(toolRequest(22, 'noobi_character_edit_preview', {}));
+    await vi.waitFor(() => expect(responses).toHaveLength(2));
+    expect(readToolResponse(responses[1]!.result).success).toBe(true);
+    expect(preview).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(after).toHaveBeenCalledTimes(2));
+  });
   it('routes character edit previews only through the active project callback and rejects extra arguments', async () => {
     const responses: Array<{ id: string | number; result: unknown }> = [];
     const project = { id: 'character-project', root: '/workspace' };

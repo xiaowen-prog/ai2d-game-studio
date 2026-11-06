@@ -56,6 +56,9 @@ export class CreationVersionStore {
     return id;
   }
   async root(projectId: string, snapshotId: string): Promise<string> {
+    return (await this.snapshot(projectId, snapshotId)).root;
+  }
+  async snapshot(projectId: string, snapshotId: string): Promise<{ root: string; files: Record<string, string> }> {
     assertCreationId(projectId); assertCreationId(snapshotId);
     const directory = join(this.directory, projectId, 'versions', snapshotId);
     let manifest: VersionManifest;
@@ -67,7 +70,7 @@ export class CreationVersionStore {
     for (const [file, hash] of Object.entries(manifest.files)) {
       if (await creationHash(root, file) !== hash) throw new CreationError('CORRUPT_VERSION', '版本文件已变化，不能将其作为原来的确认成果。');
     }
-    return root;
+    return { root, files: manifest.files };
   }
   async export(projectId: string, snapshotId: string, projectRoot: string): Promise<string> {
     const source = await this.root(projectId, snapshotId);

@@ -33,9 +33,9 @@ const TOOL_ICONS: Record<EnvironmentToolStatus['id'], LucideIcon> = {
 };
 
 const TOOL_DESCRIPTIONS: Record<EnvironmentToolStatus['id'], string> = {
-  codex: 'Agent 会话、工具调用与项目执行',
-  node: 'Noobi 桌面主进程与构建工具链',
-  godot: 'Godot 4 项目、场景验证与多平台导出',
+  codex: '让 AI 理解需求并制作游戏；测试包已内置运行程序，账户在“Codex 账户”中登录',
+  node: '制作台自带的运行环境，无需为了打开应用单独安装',
+  godot: '把 AI 制作的人物、场景和规则变成能玩的 2D 游戏',
 };
 
 const TARGET_LABELS = {
@@ -122,9 +122,9 @@ export function EnvironmentSettings({ onMessage }: EnvironmentSettingsProps) {
     <section className="environment-settings" aria-busy={busy !== null}>
       <header className="settings-page-heading environment-heading">
         <div>
-          <span>GAME TOOLCHAIN / LOCAL HOST</span>
+          <span>首次使用准备</span>
           <h3>环境管理</h3>
-          <p>检查游戏生产所需的本地工具。Noobi 只使用已经确认的可执行文件，不把环境路径交给 Agent 猜测。</p>
+          <p>登录 AI 后，再准备游戏引擎。下面会告诉你哪一项已就绪、哪一项还需要处理。</p>
         </div>
         <button
           className="secondary-button compact"
@@ -154,6 +154,16 @@ export function EnvironmentSettings({ onMessage }: EnvironmentSettingsProps) {
           <button type="button" onClick={() => void load(true)}>重试</button>
         </div>
       ) : null}
+
+      {snapshot && !snapshot.canExportGodotProjects ? <section className="environment-install-guide" aria-label="准备游戏引擎">
+        <h4>让游戏能预览，还差这些准备</h4>
+        <ol>
+          <li>安装 Godot 4 标准版。首次使用可选 <a href="https://godotengine.org/download/archive/4.5.1-stable/" target="_blank" rel="noreferrer">Godot 官方 4.5.1 下载页</a>，将 Godot 放进“应用程序”。已有 Godot 可直接点下方“选择程序”。</li>
+          <li>打开 Godot，在“编辑器 → 管理导出模板”下载并安装与引擎同版本的模板。<a href="https://docs.godotengine.org/zh-cn/stable/tutorials/export/exporting_projects.html" target="_blank" rel="noreferrer">查看官方说明</a></li>
+          <li>回来点“重新检查”。游戏引擎和网页导出模板均就绪，就可以开始制作。</li>
+        </ol>
+        <p>应用不会替你下载大文件，也不会新增付费服务；以前装好的引擎可以继续使用。</p>
+      </section> : null}
 
       <div className="environment-tool-list" aria-label="生产工具状态">
         {busy === 'loading' && !snapshot ? (
@@ -197,8 +207,8 @@ export function EnvironmentSettings({ onMessage }: EnvironmentSettingsProps) {
           <header>
             <div className="export-templates-icon"><Boxes size={18} /></div>
             <div>
-              <span>GODOT / EXPORT TEMPLATES</span>
-              <strong>多平台导出模板</strong>
+              <span>预览与交付所需文件</span>
+              <strong>游戏导出模板</strong>
               <small>{exportTemplateDescription(snapshot)}</small>
             </div>
             <EnvironmentBadge tone={templateTone(snapshot.exportTemplates.state)}>

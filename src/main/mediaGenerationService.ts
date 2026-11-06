@@ -20,6 +20,7 @@ export interface MediaGenerationProject {
 }
 
 export interface MediaGenerationInput {
+  signal?: AbortSignal;
   project: MediaGenerationProject;
   kind: MediaProviderKind;
   name: string;
@@ -155,15 +156,18 @@ export class MediaGenerationService {
   }
 
   async generate(input: MediaGenerationInput): Promise<MediaGenerationResult> {
+    assertGenerationActive(input.signal);
     const name = requiredText(input.name, 'name', MAX_NAME_LENGTH);
     const prompt = requiredText(input.prompt, 'prompt', MAX_PROMPT_LENGTH);
     const modelOverride = input.model === undefined ? undefined : requiredText(input.model, 'model', MAX_MODEL_LENGTH);
     const options = validateOptions(input.options);
     const result = await this.#options.providerStore.withActiveProvider(input.kind, async (provider) => {
+      assertGenerationActive(input.signal);
       const unsupportedFallback = providerFallback(provider, input.kind, prompt, options);
       if (unsupportedFallback) return unsupportedFallback;
       const model = resolveModel(provider, modelOverride, options);
-      const generated = await this.#requestGeneratedMedia(provider, input.kind, prompt, model, options);
+      const generated = await this.#requestGeneratedMedia(provider, input.kind, prompt, model, options, input.signal);
+      assertGenerationActive(input.signal);
       const asset = await this.#persist(input.project, generated, {
         name,
         prompt,
@@ -184,12 +188,14 @@ export class MediaGenerationService {
       } satisfies MediaGenerationAssetResult;
     });
     if (result) return result;
+    assertGenerationActive(input.signal);
     if (input.kind === 'model3d') {
       const procedural = await createProceduralModel3dGlb({
         name,
         prompt,
         animation: options.animation === true,
       });
+      assertGenerationActive(input.signal);
       const model = procedural.generator;
       const presetId = 'threejs-procedural';
       const displayName = 'Three.js Procedural GLB';
@@ -276,8 +282,12 @@ export class MediaGenerationService {
     prompt: string,
     model: string,
     options: Readonly<Record<string, string | number | boolean>>,
+    signal?: AbortSignal,
   ): Promise<GeneratedBytes> {
+    assertGenerationActive(signal);
     const controller = new AbortController();
+    const abort = () => controller.abort();
+    signal?.addEventListener('abort', abort, { once: true });
     const timer = setTimeout(() => controller.abort(), this.#requestTimeoutMs);
     try {
       const endpoint = requestEndpoint(provider, options);
@@ -303,11 +313,13 @@ export class MediaGenerationService {
       );
     } catch (error) {
       if (controller.signal.aborted) {
-        throw new MediaGenerationPublicError('Media provider request timed out');
+        assertGenerationActive(signal);
+        throw new MediaGenerationPublicError('Media provider request timed out; 远端可能已处理，请检查结果后再重试。');
       }
       throw publicMediaRequestError(error);
     } finally {
       clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
     }
   }
 
@@ -1031,4 +1043,8 @@ function safeStem(value: string): string {
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function assertGenerationActive(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new MediaGenerationPublicError('生成已停止；远端可能已处理请求，请检查结果后再重试。');
 }

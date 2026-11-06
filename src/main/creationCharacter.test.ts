@@ -75,7 +75,7 @@ describe('node 2-2 candidate choices and restoration', () => {
     const s = await act({ action: 'revise', stage: 'character', impactAccepted: true, prompt: '衣服改白，保留发型和武器' });
     expect(generate.mock.calls.at(-1)?.[0].steps.character.artifact?.selectedCharacterId).toBe('b');
     expect(s.steps.character.confirmedVersionId).toBeNull();
-    const restored = await act({ action: 'restore', checkpointId: checkpoint.id });
+    const restored = await act({ action: 'restore', impactAccepted: true, checkpointId: checkpoint.id });
     expect(restored.steps.character).toEqual(approved.steps.character);
     expect(restored.currentStage).toBe('character'); expect(generate).toHaveBeenCalledTimes(3);
   });

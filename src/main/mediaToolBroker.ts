@@ -1,3 +1,4 @@
+import { checkToolPolicy, observeTool, ToolPolicyError, type ToolHooks, type ToolHookContext } from './toolHooks.js';
 import type { AssetStore } from './assetStore.js';
 import type { AssetPlanStore, AssetPlanUpsertInput } from './assetPlanStore.js';
 import type { CodexAppServer, DynamicToolSpec, JsonValue } from './codexAppServer.js';
@@ -39,6 +40,8 @@ export interface MediaToolProject {
 }
 
 export interface MediaToolBrokerOptions {
+  hooks?: ToolHooks;
+  generationSignal?(projectId: string): AbortSignal | undefined;
   server: Pick<CodexAppServer, 'respondToServerRequest'>;
   assetStore: AssetStore;
   assetPlanStore?: Pick<
@@ -230,9 +233,29 @@ export const MEDIA_DYNAMIC_TOOLS: DynamicToolSpec[] = [
 /** Routes App Server dynamic media calls without allowing raw binary protocol output. */
 export class MediaToolBroker {
   readonly #options: MediaToolBrokerOptions;
+  readonly #pending = new Map<string, Set<Promise<void>>>();
 
   constructor(options: MediaToolBrokerOptions) {
     this.#options = options;
+  }
+
+  isRunning(projectId: string): boolean { return Boolean(this.#pending.get(projectId)?.size); }
+
+  async waitForProject(projectId: string): Promise<void> {
+    while (this.#pending.get(projectId)?.size) await Promise.allSettled([...this.#pending.get(projectId)!]);
+  }
+
+  #track(projectId: string): () => void {
+    let resolve!: () => void;
+    const done = new Promise<void>(finish => { resolve = finish; });
+    const pending = this.#pending.get(projectId) ?? new Set<Promise<void>>();
+    pending.add(done);
+    this.#pending.set(projectId, pending);
+    return () => {
+      pending.delete(done);
+      if (!pending.size) this.#pending.delete(projectId);
+      resolve();
+    };
   }
 
   handle(request: JsonRpcServerRequest): boolean {
@@ -243,11 +266,18 @@ export class MediaToolBroker {
 
   async #handle(request: JsonRpcServerRequest): Promise<void> {
     let project: MediaToolProject | null = null;
+    let release: (() => void) | undefined;
+    let hookContext: ToolHookContext | undefined;
+    let success = false;
+    const started = Date.now();
     try {
       const params = readCallParams(request.params);
       project = await this.#options.resolveProject(params.threadId);
       if (!project) throw new ToolInputError('This tool call is not attached to an active Noobi.ai project');
 
+      release = this.#track(project.id);
+      hookContext = { projectId: project.id, threadId: params.threadId, turnId: params.turnId, callId: params.callId, tool: params.tool };
+      await checkToolPolicy(this.#options.hooks, hookContext);
       let payload: unknown;
       switch (params.tool) {
         case 'noobi_character_edit_preview':
@@ -279,9 +309,13 @@ export class MediaToolBroker {
         default:
           throw new ToolInputError('Unknown Noobi.ai media tool');
       }
+      success = true;
       this.#respond(request.id, payload, true);
     } catch (error) {
-      this.#respond(request.id, { error: safeError(error, project?.root) }, false);
+      this.#respond(request.id, { error: error instanceof ToolPolicyError ? error.message : safeError(error, project?.root) }, false);
+    } finally {
+      release?.();
+      if (hookContext) observeTool(this.#options.hooks, hookContext, success, started);
     }
   }
 
@@ -486,8 +520,10 @@ export class MediaToolBroker {
       ...(model ? { model } : {}),
       ...(Object.keys(options).length ? { options } : {}),
     });
+    const signal = this.#options.generationSignal?.(project.id);
     let began = false;
     try {
+      signal?.throwIfAborted();
       if (plan) {
         plan = await this.#beginPlan(project, plan.id);
         began = true;
@@ -500,6 +536,7 @@ export class MediaToolBroker {
         prompt,
         ...(model ? { model } : {}),
         ...(Object.keys(options).length ? { options } : {}),
+        ...(signal ? { signal } : {}),
       });
       if (result.outcome === 'asset') {
         if (this.#options.onGeneratedAsset) {

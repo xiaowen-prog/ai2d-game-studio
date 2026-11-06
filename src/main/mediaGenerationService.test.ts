@@ -15,6 +15,33 @@ afterEach(async () => {
 });
 
 describe('media generation service', () => {
+  it('rejects an already cancelled request before looking up a provider or writing files', async () => {
+    const providerStore = { withActiveProvider: vi.fn() };
+    const assetStore = { list: vi.fn(), importFiles: vi.fn(), registerExisting: vi.fn() };
+    const fetchMock = vi.fn();
+    const service = new MediaGenerationService({ providerStore: providerStore as never, assetStore, fetch: fetchMock as never });
+    await expect(service.generate({ project: { id: 'p', root: '/unused' }, kind: 'image', name: 'hero', prompt: 'hero', signal: AbortSignal.abort() }))
+      .rejects.toThrow('生成已停止');
+    expect(providerStore.withActiveProvider).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(assetStore.importFiles).not.toHaveBeenCalled();
+  });
+
+  it('aborts a provider request on host cancellation and does not persist a late response', async () => {
+    const { root, providerStore } = await configuredStore({ presetId: 'minimax-audio', apiKey: 'offline-test-secret' });
+    const assetStore = { list: vi.fn(), importFiles: vi.fn(), registerExisting: vi.fn() };
+    const controller = new AbortController();
+    const fetchMock = vi.fn(async (_url, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true });
+    }));
+    const service = new MediaGenerationService({ providerStore, assetStore, fetch: fetchMock as typeof fetch });
+    const result = expect(service.generate({ project: { id: 'p', root }, kind: 'audio', name: 'voice', prompt: 'hello', options: { purpose: 'speech' }, signal: controller.signal }))
+      .rejects.toThrow('生成已停止');
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    controller.abort();
+    await result;
+    expect(assetStore.importFiles).not.toHaveBeenCalled();
+  });
   it('represents safe image and audio fallbacks when no API provider is configured', async () => {
     const providerStore = {
       withActiveProvider: vi.fn(async () => null),

@@ -11,10 +11,13 @@ const brief = { title: '竹林剑客', genre: 'topdown' as const, theme: '武侠
 function output(workflow: CreationWorkflow): CreationArtifact {
   if (workflow.currentStage === 'direction') return directionArtifact(brief);
   const selected = workflow.steps.character.artifact?.selectedCharacterId ?? null;
+  const game = workflow.steps.game.artifact;
   return { ...directionArtifact(brief), direction: undefined, stage: workflow.currentStage,
     candidates: workflow.currentStage === 'character' ? [{ id: 'a', name: '甲', image: 'a.png' }, { id: 'b', name: '乙', image: 'b.png' }] : [],
     selectedCharacterId: selected, ready: workflow.currentStage !== 'character' || !!selected,
-    snapshotId: creationId() };
+    snapshotId: workflow.currentStage === 'delivery' ? game!.snapshotId : creationId(),
+    ...(workflow.currentStage === 'game' ? { round: { manifest: '.noobi/topdown-round.json' as const, genre: 'topdown' as const, waveCounts: [4, 6, 8], playerHealth: 5, maxBounces: 0 as const } } : {}),
+    ...(workflow.currentStage === 'delivery' ? { delivery: { bundleId: creationId(), sourceVersionId: game!.id, sourceSnapshotId: game!.snapshotId!, manifestSha256: 'a'.repeat(64), archiveSha256: 'b'.repeat(64), fileCount: 1 } } : {}) };
 }
 describe('creation workflow host approval and persistence', () => {
   let root: string; let store: CreationWorkflowStore; let service: CreationWorkflowService;
@@ -33,6 +36,18 @@ describe('creation workflow host approval and persistence', () => {
     await service.idle('project');
     return (await service.get('project'))!;
   }
+  it.each(['sync', 'async'])('does not strand a durable task when a %s UI observer fails', async (mode) => {
+    const onChanged = vi.fn(() => {
+      if (mode === 'sync') throw new Error('UI disconnected');
+      return Promise.reject(new Error('UI disconnected'));
+    });
+    service = new CreationWorkflowService({ store, generator: { generate }, onChanged });
+    const state = await action({ action: 'run' });
+    expect(state.task?.state).toBe('succeeded');
+    expect(state.steps.direction.status).toBe('awaiting-confirmation');
+    expect(generate).toHaveBeenCalledOnce();
+    expect(await new CreationWorkflowStore(root).get('project')).toEqual(state);
+  });
   it('does not call any model on creation or while awaiting user confirmation', async () => {
     expect(generate).not.toHaveBeenCalled();
     const state = await action({ action: 'run' });
@@ -131,7 +146,7 @@ describe('creation workflow host approval and persistence', () => {
     const saved = approved.history.find((item) => item.label === '已确认方向')!;
     await action({ action: 'revise', stage: 'direction', prompt: '换主题', impactAccepted: true });
     const calls = generate.mock.calls.length;
-    const restored = await action({ action: 'restore', checkpointId: saved.id });
+    const restored = await action({ action: 'restore', impactAccepted: true, checkpointId: saved.id });
     expect(restored.steps.direction.confirmedVersionId).toBe(saved.steps.direction.confirmedVersionId);
     expect(restored.currentStage).toBe('character'); expect(restored.steps.character.artifact).toBeNull();
     expect(generate).toHaveBeenCalledTimes(calls); expect(restored.history.length).toBeGreaterThan(approved.history.length);
@@ -142,7 +157,12 @@ describe('creation workflow host approval and persistence', () => {
     for (const stage of ['character', 'scene', 'playable', 'game']) {
       expect((await service.get('project'))!.currentStage).toBe(stage);
       await action({ action: 'confirm' });
+      if (stage === 'playable') await action({ action: 'continue' });
     }
+    const confirmed = (await service.get('project'))!;
+    expect(confirmed.currentStage).toBe('game');
+    expect(confirmed.steps.delivery.status).toBe('idle');
+    await action({ action: 'export', versionId: confirmed.steps.game.artifact!.id });
     expect((await service.get('project'))!.currentStage).toBe('delivery');
     expect((await service.get('project'))!.completed).toBe(false);
     expect((await action({ action: 'confirm' })).completed).toBe(true);
@@ -173,7 +193,7 @@ describe('creation workflow host approval and persistence', () => {
       const changed = await action({ action: 'revise', stage: 'direction', prompt: '手动攻击', impactAccepted: true });
       expect(changed.steps.direction.confirmedVersionId).toBeNull();
       expect(changed.steps.direction.artifact?.direction?.controls).toBe('空格键手动攻击');
-      const restored = await action({ action: 'restore', checkpointId: saved.id });
+      const restored = await action({ action: 'restore', impactAccepted: true, checkpointId: saved.id });
       expect(restored.steps.direction.artifact?.id).toBe(first.steps.direction.artifact?.id);
       expect(restored.steps.direction.status).toBe('confirmed');
       expect(restored.currentStage).toBe('direction');

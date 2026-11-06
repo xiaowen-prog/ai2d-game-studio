@@ -1,0 +1,177 @@
+/* Loaded after the legacy shell. Tokens also reach portalled menus and settings. */
+:root[data-studio='true'] {
+  --bg: #000; --panel: #ffffff14; --panel-hover: #ffffff26; --panel-raised: #ffffff32;
+  --line: #ffffff20; --line-strong: #ffffff40; --text: #fff; --text-soft: #ccc;
+  --muted: #999; --faint: #999; --accent: #0062ff; --accent-soft: #0062ff18; --accent-ink: #fff;
+  --input-bg: #0006; --red: #e88d86; --green: #a6c4b0;
+  --sans: 'Spline Sans', Inter, system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --studio-bg: var(--bg); --studio-surface: #141414; --studio-surface-raised: #262626;
+  --studio-border: var(--line); --studio-text: var(--text); --studio-muted: var(--muted);
+  --studio-accent: var(--accent); --studio-accent-ink: #fff; --studio-shadow: transparent;
+  --glass-surface: var(--panel); --glass-surface-strong: #141414; --glass-border: var(--line);
+  --glass-highlight: transparent; --glass-chip: var(--panel); --glass-chip-hover: var(--panel-hover);
+  --glass-control: var(--panel); --glass-shadow: none;
+}
+/* Existing theme preference stays usable; dark is the approved primary design. */
+:root[data-studio='true'][data-theme='light'] {
+  --bg: #f7f7f8; --panel: #00000006; --panel-hover: #0000000d; --panel-raised: #00000014;
+  --line: #00000016; --line-strong: #00000035; --text: #151515; --text-soft: #444;
+  --muted: #666; --faint: #666; --input-bg: #ffffffb3; --red: #aa4639; --green: #486d4e;
+  --studio-surface: #fff; --studio-surface-raised: #eee; --glass-surface-strong: #fff;
+}
+.app-shell.studio-mode, :root[data-theme] .app-shell.studio-mode {
+  display: flex; background: var(--bg); background-image: none; color: var(--text);
+  font-family: var(--sans); image-rendering: auto;
+}
+.studio-mode .workspace { background: var(--bg); margin: 0; }
+.studio-mode .topbar, .studio-mode .home-toolbar {
+  min-height: 76px; flex-basis: 76px; gap: 16px; padding: 12px 28px;
+  background: transparent; border: 0;
+}
+.studio-mode .mobile-menu, .studio-mode .home-mobile-menu { display: inline-grid; place-items: center; flex: none; min-width: 36px; width: 36px; height: 36px; border-radius: 12px; color: var(--text-soft); }
+.studio-mode .studio-brand { display: inline-flex; align-items: center; gap: 10px; flex: none; background: transparent; padding: 0; border: 0; font: 500 16px var(--sans); color: var(--text); white-space: nowrap; }
+.studio-brand-mark {
+  display: inline-block; width: 28px; height: 28px; flex: none;
+  background: url('./assets/zaojing-icon.png') center / contain no-repeat;
+}
+.studio-mode .topbar-project { position: static; transform: none; min-width: 0; max-width: none; margin-left: 12px; gap: 0; order: 1; }
+.studio-mode .topbar-project strong { font: 400 13px var(--sans); color: var(--text-soft); }
+.studio-mode .topbar-project :is(.engine-chip, .status-chip) { display: none; }
+.studio-mode .topbar .runtime-status { order: 2; margin-left: auto; flex: none; }
+.studio-mode .topbar-actions { order: 3; margin: 0; gap: 4px; }
+.studio-mode .runtime-status > span:last-child { display: none; }
+.studio-mode .topbar .icon-button, .studio-mode .home-toolbar-actions button { border-radius: 12px; border: 0; color: var(--muted); }
+.studio-mode .topbar button:hover, .studio-mode .home-toolbar button:hover { background: var(--panel); color: var(--text); }
+.studio-mode .topbar .studio-brand:hover { background: transparent; }
+.studio-mode.view-home .project-rail.mode-dashboard, .studio-mode.view-workbench .project-rail.mode-workbench {
+  position: fixed; z-index: 90; top: 0; bottom: 0; left: 0; width: min(88vw, 292px); min-width: 0; flex: none;
+  transform: translateX(-101%); visibility: hidden; padding: 20px 16px;
+  background: var(--studio-surface); box-shadow: none; border-right: 1px solid var(--line); transition: transform 180ms ease, visibility 180ms;
+}
+.studio-mode.view-home .project-rail.mode-dashboard.is-open, .studio-mode.view-workbench .project-rail.mode-workbench.is-open { transform: translateX(0); visibility: visible; }
+.studio-mode .rail-scrim { display: block; background: #0009; }
+.studio-mode .rail-scrim.is-visible { opacity: 1; pointer-events: auto; }
+.studio-mode .rail-close { display: inline-flex; }
+.studio-mode.view-home .project-rail.mode-dashboard .rail-collapse { display: none; }
+.studio-mode .brand-copy strong { font-family: var(--sans); font-weight: 500; }
+.studio-mode .home-dashboard { background: var(--bg); }
+.studio-mode .home-hero {
+  min-height: 0; overflow: visible; position: relative; isolation: isolate;
+}
+.studio-mode .home-hero::before {
+  content: ''; position: absolute; z-index: -1; pointer-events: none;
+  inset: 0 0 auto; height: 440px;
+  background: url('./assets/zaojing-world-grid.svg') center top / min(100%, 1260px) auto no-repeat,
+    radial-gradient(ellipse at 50% 14%, #193d8745, transparent 65%);
+}
+:root[data-studio='true'][data-theme='light'] .studio-mode .home-hero::before { opacity: .45; }
+.studio-mode .home-hero-content { width: min(100%, 760px); padding: 50px 24px 40px; }
+.studio-mode .home-hero h1 {
+  font: 560 clamp(32px, 4vw, 52px)/1.24 var(--sans);
+  letter-spacing: -.05em; text-wrap: balance; text-shadow: none;
+  -webkit-font-smoothing: antialiased; max-width: 640px;
+}
+.studio-mode .home-hero-content > p { font-size: 14px; color: var(--muted); }
+.studio-mode .home-loop-status { border: 0; background: var(--panel); color: var(--text-soft); font: 400 11px var(--sans); padding: 9px 12px; border-radius: 99px; box-shadow: none; }
+.studio-mode .home-loop-status i { background: var(--text-soft); box-shadow: none; }
+.studio-mode .home-prompt-card {
+  margin-top: 28px; background: var(--studio-surface);
+  border: 1px solid var(--line-strong); border-radius: 20px;
+  box-shadow: 0 -1px 0 #7eb8ff45, 0 0 42px #275ca61c; backdrop-filter: none;
+}
+.studio-mode .home-prompt-card:focus-within { border-color: #579cff; }
+.studio-mode .home-prompt-card textarea { font: 15px/1.8 var(--sans); min-height: 120px; padding: 22px; }
+.studio-mode .home-prompt-card textarea::placeholder { color: var(--muted); }
+.studio-mode .home-prompt-controls { padding: 0 16px 16px; }
+.studio-mode .home-create-button { background: #0062ff; color: #fff; border: 0; border-radius: 12px; box-shadow: none; }
+.studio-mode .home-create-button:hover { background: #1a72ff; }
+.studio-mode .home-first-use { background: var(--panel); border: 0; border-radius: 16px; box-shadow: none; gap: 16px; padding: 18px; }
+.studio-mode .home-first-use strong { font-weight: 500; font-size: 14px; }
+.studio-mode .primary-button { border-radius: 12px; border: 0; background: #0062ff; color: #fff; font-weight: 500; box-shadow: none; }
+.studio-mode .secondary-button { border-radius: 12px; background: var(--panel-hover); color: var(--text); }
+.studio-mode .home-idea-starters { margin-top: 12px; }
+.studio-mode .home-idea-starters button { background: var(--panel); color: var(--text-soft); border: 0; border-radius: 99px; padding: 10px 16px; box-shadow: none; }
+.studio-mode .home-hero-content > .studio-home-scope { margin-top: 24px; font-size: 11px; color: var(--muted); }
+.studio-mode .home-projects { width: min(100%, 1120px); margin: 0 auto; padding: 20px 32px 48px; border: 0; background: transparent; box-shadow: none; }
+.studio-mode .home-projects h2 { font: 500 22px var(--sans); color: var(--text); }
+.studio-mode .home-projects > header span { color: var(--muted); font: 11px var(--sans); letter-spacing: 0; }
+.studio-mode .home-project-grid > button { background: var(--panel); border: 1px solid transparent; border-radius: 16px; box-shadow: none; color: var(--text); }
+.studio-mode .home-project-grid > button:hover { border-color: var(--line-strong); background: var(--panel-hover); }
+.studio-mode .home-project-copy strong { font-weight: 500; }
+.studio-mode .home-project-empty { border: 0; border-radius: 24px; background: var(--panel); color: var(--text-soft); }
+.studio-mode .home-project-empty strong { font-weight: 500; }
+.studio-loading { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 32px; text-align: center; }
+.studio-loading h1 { font: 500 24px var(--sans); margin: 0; }
+.studio-loading p { color: var(--muted); line-height: 1.8; }
+:root[data-studio='true'] .modal { background: var(--studio-surface); color: var(--text); border-color: var(--line); border-radius: 24px; box-shadow: none; }
+:root[data-studio='true'] .modal h2 { font-family: var(--sans); font-weight: 500; }
+:root[data-studio='true'] .modal button { border-radius: 12px; }
+:root[data-studio='true'] .modal .primary-button { background: #0062ff; color: #fff; border: 0; }
+:root[data-studio='true'] :is(button, a, select, summary):focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+@media (max-width: 800px) {
+  .studio-mode .topbar, .studio-mode .home-toolbar { min-height: 68px; flex-basis: 68px; padding: 10px 16px; gap: 10px; }
+  .studio-mode .studio-brand { font-size: 14px; }
+  .studio-mode .topbar-project { margin-left: 4px; }
+  .studio-mode .home-hero-content { padding: 32px 20px; }
+  .studio-mode .home-projects { padding: 20px 20px 32px; }
+  .studio-mode .home-prompt-controls { flex-wrap: wrap; gap: 8px; }
+  .studio-mode .home-engine-advisor { display: none; }
+}
+@media (max-width: 560px) {
+  .studio-mode .topbar .studio-brand > span:last-child { display: none; }
+  .studio-mode .topbar-project strong { font-size: 12px; }
+  .studio-mode .topbar .runtime-status { display: none; }
+  .studio-mode .topbar-actions { margin-left: auto; }
+  .studio-mode .topbar-actions .icon-button { min-width: 32px; width: 32px; }
+  .studio-mode .home-hero h1 { font-size: 32px; }
+  .studio-mode .home-first-use { flex-direction: column; align-items: stretch; }
+}
+@media (prefers-reduced-motion: reduce) { .studio-mode .project-rail { transition: none; } }
+
+.environment-install-guide { padding: 18px 20px; margin: 16px 0; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; }
+.environment-install-guide h4 { margin: 0 0 12px; color: var(--text); font-size: 14px; font-weight: 500; }
+.environment-install-guide ol { margin: 0; padding-left: 20px; color: var(--text-soft); font-size: 12px; line-height: 1.9; }
+.environment-install-guide li + li { margin-top: 8px; }
+.environment-install-guide a { text-decoration: underline; text-underline-offset: 3px; color: var(--text); }
+.environment-install-guide p { margin: 12px 0 0; color: var(--muted); font-size: 11px; line-height: 1.8; }
+
+.studio-mode .home-scene {
+  min-width: 0; margin: 0 20px 32px; overflow: hidden;
+  color: #e7efff; background: #0e1425; border: 1px solid #7f9cdb3d; border-radius: 22px;
+}
+.studio-mode .home-scene header {
+  display: flex; justify-content: space-between; padding: 17px 20px;
+  color: #b4c5e7; font: 12px var(--sans); letter-spacing: .06em;
+}
+.studio-mode .home-scene svg { display: block; width: 100%; height: auto; }
+.studio-mode .home-scene-switch {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 6px; margin: 12px;
+  border-radius: 12px; background: #050917;
+}
+.studio-mode .home-scene-switch button {
+  min-height: 38px; border: 0; border-radius: 8px; background: transparent;
+  color: #afc3e7; font: 13px var(--sans); cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+.studio-mode .home-scene-switch button:hover { color: #fff; background: #182844; }
+.studio-mode .home-scene-switch button[aria-pressed='true'] { color: #fff; background: #263b64; }
+@media (min-width: 1040px) {
+  .studio-mode .home-hero {
+    width: min(100%, 1250px); margin: 0 auto; padding: 58px 44px 42px;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: clamp(40px, 6vw, 90px);
+  }
+  .studio-mode .home-hero-content { width: 100%; padding: 0; justify-items: start; text-align: left; }
+  .studio-mode .home-hero-content > :is(h1, p) { text-wrap: pretty; }
+  .studio-mode .home-hero h1 { line-height: 1.17; }
+  .studio-mode .home-scene { margin: 40px 0 0; }
+  .studio-mode .home-idea-starters { justify-content: flex-start; }
+}
+@media (max-width: 1039px) {
+  .studio-mode .home-scene { width: min(calc(100% - 40px), 460px); justify-self: center; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .home-scene-layer { animation: home-scene-appear 240ms ease-out both; }
+  .home-scene-spark { animation: home-scene-spark 2.8s ease-in-out 2; }
+}
+@keyframes home-scene-appear { from { opacity: 0; transform: translateY(5px); } }
+@keyframes home-scene-spark { 50% { opacity: .55; } }

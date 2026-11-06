@@ -1,0 +1,2 @@
+75e59f28aea4ea1c53cae0f78da376734f63511b2f0ce0d3d3dc5a00fbd79667  AI2D-Game-Studio-0.1.0-preview.3.2-arm64.dmg
+70cc2d51fc3ab18387414b0f960b28e521349cd3ae39585775df140e2e1769f1  AI2D-Game-Studio-0.1.0-preview.3.2-arm64.zip

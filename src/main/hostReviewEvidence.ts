@@ -40,7 +40,7 @@ export async function engineDirectory(root: string): Promise<string> {
 export async function archiveCurrentReviewEvidence(root: string): Promise<void> {
   await archiveLatestGameplayExperienceReport(root);
   const directory = await engineDirectory(root);
-  for (const name of ['latest.json', 'actions-latest.json', 'scene-latest.json', 'platformer-latest.json']) {
+  for (const name of ['latest.json', 'actions-latest.json', 'scene-latest.json', 'platformer-latest.json', 'topdown-latest.json']) {
   const latest = join(directory, name);
   try {
     const metadata = await lstat(latest);

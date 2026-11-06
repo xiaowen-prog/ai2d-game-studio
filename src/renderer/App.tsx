@@ -76,6 +76,8 @@ export function App() {
   );
   const [events, setEvents] = useState<EventMap>({});
   const [creationWorkflows, setCreationWorkflows] = useState<Record<string, CreationWorkflow | null>>({});
+  const [creationLoadError, setCreationLoadError] = useState('');
+  const [creationReload, setCreationReload] = useState(0);
   const homeLaunchGuard = useRef(false);
   const updateCreation = useCallback((workflow: CreationWorkflow) => {
     setCreationWorkflows((current) => (current[workflow.projectId]?.revision ?? -1) > workflow.revision
@@ -109,16 +111,22 @@ export function App() {
   );
   const selectedEvents = selected ? (events[selected.id] ?? []) : [];
   const creationWorkflow = selected ? creationWorkflows[selected.id] : null;
+  const splineStudio = !selected || creationWorkflow !== null;
+  useEffect(() => {
+    document.documentElement.dataset.studio = String(splineStudio);
+    return () => { delete document.documentElement.dataset.studio; };
+  }, [splineStudio]);
   useEffect(() => {
     let active = true;
+    setCreationLoadError('');
     if (selectedId) void window.noobi.creation.get(selectedId).then((reply) => {
       if (!active) return;
       if (reply.ok && reply.value) updateCreation(reply.value);
       else if (reply.ok) setCreationWorkflows((current) => ({ ...current, [selectedId]: null }));
-      else setError(reply.error.message);
-    }).catch(() => { if (active) setError('创作记录加载失败，请重新打开项目。'); });
+      else setCreationLoadError(reply.error.message);
+    }).catch(() => { if (active) setCreationLoadError('创作记录加载失败，已有项目仍保留。请重新读取。'); });
     return () => { active = false; };
-  }, [selectedId, updateCreation]);
+  }, [selectedId, updateCreation, creationReload]);
   useEffect(() => window.noobi.creation.onChanged(updateCreation), [updateCreation]);
   const latestSelectedEvent = selectedEvents[selectedEvents.length - 1] ?? null;
   const studioStage = selected
@@ -272,7 +280,7 @@ export function App() {
   function ensureRunReady(): boolean {
     setError('');
     if (!runtime) {
-      setError('Noobi.ai 正在读取 Codex 运行时，请稍后再试。');
+      setError('造境正在读取 Codex 运行时，请稍后再试。');
       return false;
     }
     if (runtime.state !== 'ready') {
@@ -391,11 +399,7 @@ export function App() {
     try {
       await window.noobi.retryAssetPlan(selected.id, plan.id);
       setRefreshSignal((value) => value + 1);
-      await runProject(
-        `重新生成并完整接入素材工单 ${plan.id}（${plan.kind} / ${plan.name}）。必须使用该 planId 调用对应的 Noobi 素材工具；生成成功后更新生产代码中的真实引用，运行构建和玩法验证，直到宿主验收通过。不要停留在占位或仅生成未接入状态。`,
-        selected.model ?? settings.defaultModel,
-        settings.defaultEffort,
-      );
+
     } catch (reason) {
       setError(toMessage(reason));
       setRefreshSignal((value) => value + 1);
@@ -472,7 +476,7 @@ export function App() {
     return (
       <main className="loading-screen">
         <div className="loading-brand">
-          <div><strong>Noobi.ai</strong><small>GAME PRODUCTION SYSTEM</small></div>
+          <div><strong>造境</strong><small>AI 游戏制作台</small></div>
         </div>
         {loadingError ? (
           <div className="loading-error" role="alert">
@@ -505,7 +509,7 @@ export function App() {
 
   return (
     <div
-      className={`app-shell ${selected ? 'view-workbench' : 'view-home'}${transitionClass}`}
+      className={`app-shell${splineStudio ? ' studio-mode' : ''} ${selected ? 'view-workbench' : 'view-home'}${transitionClass}`}
       style={transitionStyle}
     >
       <ProjectRail
@@ -513,7 +517,7 @@ export function App() {
         selectedId={selectedId}
         runtime={runtime}
         open={railOpen}
-        collapsed={!selected && homeRailCollapsed}
+        collapsed={splineStudio ? false : !selected && homeRailCollapsed}
         variant={selected ? 'workbench' : 'dashboard'}
         onOpen={() => setRailOpen(true)}
         onClose={() => setRailOpen(false)}
@@ -537,6 +541,7 @@ export function App() {
           >
             <Menu size={18} />
           </button>
+          {splineStudio ? <button type="button" className="studio-brand" onClick={navigateHome} aria-label="返回创作首页"><span className="studio-brand-mark" aria-hidden="true" /><span>游戏制作台</span></button> : null}
           <button
             className="runtime-status"
             type="button"
@@ -548,7 +553,7 @@ export function App() {
           </button>
 
           <div className="topbar-project">
-            <strong>{selected?.name ?? 'Noobi Workspace'}</strong>
+            <strong>{selected?.name ?? '造境工作区'}</strong>
             {selected ? (
               <>
                 <span className={`engine-chip engine-${selected.engine}`}>
@@ -593,7 +598,12 @@ export function App() {
           </div>
         </header> : null}
 
-        {selected && creationWorkflow ? (
+        {selected && (creationWorkflow === undefined || creationLoadError) ? <section className="studio-loading" aria-label="读取项目">
+          <h1>{creationLoadError ? '暂时没有读取到项目' : '正在打开你的游戏'}</h1>
+          <p role={creationLoadError ? 'alert' : 'status'}>{creationLoadError || '读取已保存的进度与成果…'}</p>
+          {creationLoadError ? <button type="button" className="primary-button" onClick={() => setCreationReload(value => value + 1)}>重新读取</button> : null}
+          <button type="button" className="secondary-button" onClick={navigateHome}>返回首页</button>
+        </section> : selected && creationWorkflow ? (
           <CreationWorkspace key={selected.id} project={selected} workflow={creationWorkflow}
             onChanged={updateCreation} onSettings={() => openSettings()} />
         ) : selected ? (

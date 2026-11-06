@@ -8,17 +8,19 @@ export const CREATION_STAGES = [
 ] as const;
 export type CreationStage = typeof CREATION_STAGES[number]['id'];
 /** Release boundary owned by the host; requests cannot unlock unaccepted development nodes. */
-export const CREATION_LAST_ENABLED_STAGE: CreationStage = 'playable';
+export const CREATION_LAST_ENABLED_STAGE: CreationStage = 'delivery';
 export function isCreationStageEnabled(stage: CreationStage, last: CreationStage = CREATION_LAST_ENABLED_STAGE): boolean {
   const index = CREATION_STAGES.findIndex((item) => item.id === stage);
   return index >= 0 && index <= CREATION_STAGES.findIndex((item) => item.id === last);
 }
-/** Node 2-5 opens horizontal gameplay only; top-down remains at approved scenes. */
+/** Both confirmed 2D directions can export; an unknown direction cannot skip the scene gate. */
 export function creationStageLimit(genre: CreationGenre | undefined, last: CreationStage = CREATION_LAST_ENABLED_STAGE): CreationStage {
-  return last === 'playable' && genre !== 'platformer' ? 'scene' : last;
+  if (last === 'game' || last === 'delivery') return genre === 'platformer' || genre === 'topdown' ? last : 'scene';
+  return last === 'playable' && genre !== 'platformer' && genre !== 'topdown' ? 'scene' : last;
 }
 export type CreationStatus = 'idle' | 'running' | 'awaiting-confirmation' | 'confirmed' | 'needs-update' | 'failed' | 'stopped';
 export type CreationGenre = 'platformer' | 'topdown';
+export type AppearanceTarget = 'character' | 'scene';
 export interface CreationDirection {
   title: string;
   genre: CreationGenre;
@@ -31,6 +33,14 @@ export interface CreationDirection {
 export interface CreationCandidate { id: string; name: string; image: string; description?: string }
 export interface CreationActions { manifest: string; states: Array<{ id: 'idle' | 'walk' | 'jump' | 'attack'; label: string; key: string }>; }
 export interface CreationMedia { path: string; label: string; kind: 'image' | 'animation' }
+export interface CreationDelivery {
+  bundleId: string;
+  sourceVersionId: string;
+  sourceSnapshotId: string;
+  manifestSha256: string;
+  archiveSha256: string;
+  fileCount: number;
+}
 export interface CreationArtifact {
   id: string;
   stage: CreationStage;
@@ -45,14 +55,22 @@ export interface CreationArtifact {
   characterPhase?: 'candidates' | 'actions';
   actions?: CreationActions;
   scene?: { manifest: string; background: string; genre: CreationGenre };
-  playable?: { manifest: string; genre: 'platformer'; maxJumps: 1 | 2 };
+  playable?: { manifest: string; genre: 'platformer'; maxJumps: 1 | 2 }
+    | { manifest: string; genre: 'topdown'; maxBounces: 0 | 1 };
+  round?: { manifest: '.noobi/platformer-round.json'; genre: 'platformer'; timeLimitSeconds: number; maxJumps: 1 | 2 }
+    | { manifest: '.noobi/topdown-round.json'; genre: 'topdown'; waveCounts: number[]; playerHealth: number; maxBounces: 0 | 1 };
   media: CreationMedia[];
   ready: boolean;
   snapshotId: string | null;
   checks: string[];
   /** Host-recorded hashes of assets which later stages must preserve. */
   lockedAssets: Record<string, string>;
+  /** Host-created linked revision, approved together from the full-game screen. */
+  appearanceChange?: { target: AppearanceTarget; checkpointId: string; stages: CreationStage[] };
+  delivery?: CreationDelivery;
 }
+/** Transient generator result; linked artifacts are stored as ordinary stage records. */
+export type CreationGenerationResult = CreationArtifact & { linkedArtifacts?: Partial<Record<CreationStage, CreationArtifact>> };
 export interface CreationStep {
   status: CreationStatus;
   artifact: CreationArtifact | null;
@@ -63,6 +81,8 @@ export interface CreationTask {
   operationId: string;
   stage: CreationStage;
   characterPhase?: 'candidates' | 'actions';
+  appearanceTarget?: AppearanceTarget;
+  sourceCheckpointId?: string;
   prompt: string;
   startedAt: string;
   state: 'running' | 'succeeded' | 'failed' | 'stopped';
@@ -97,7 +117,8 @@ export interface CreationAction {
   projectId: string;
   operationId: string;
   expectedRevision: number;
-  action: 'run' | 'confirm' | 'select' | 'revise' | 'restore' | 'stop' | 'animate' | 'edit-character' | 'continue';
+  action: 'run' | 'confirm' | 'select' | 'revise' | 'restore' | 'stop' | 'animate' | 'edit-character' | 'continue' | 'revise-appearance' | 'export' | 'return-game';
+  appearanceTarget?: AppearanceTarget;
   prompt?: string;
   versionId?: string;
   candidateId?: string;
@@ -116,6 +137,7 @@ export interface CreationApi {
   get(projectId: string): Promise<CreationReply<CreationWorkflow | null>>;
   act(input: CreationAction): Promise<CreationReply<CreationWorkflow>>;
   preview(projectId: string, versionId: string): Promise<CreationReply<CreationPreview>>;
+  revealDelivery(projectId: string, versionId: string): Promise<CreationReply<void>>;
   onChanged(listener: (workflow: CreationWorkflow) => void): () => void;
 }
 export function isCreationStage(value: unknown): value is CreationStage {

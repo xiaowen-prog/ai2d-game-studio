@@ -7,6 +7,13 @@ import {
 } from './eventMapper.js';
 
 describe('eventMapper', () => {
+  it.each(['thread/compacted', 'item/started', 'item/completed'])('maps %s context compaction without changing the current step', (method) => {
+    const event = notificationToEvent({ method, params: { threadId: 't', item: { type: 'contextCompaction', id: 'c', secret: 'private-history' } } },
+      { projectId: 'p', role: 'implementer' }, 'world');
+    expect(event).toMatchObject({ projectId: 'p', stage: 'world', kind: 'lifecycle' });
+    expect(event?.title).toContain('上下文');
+    expect(event?.message).not.toContain('private-history');
+  });
   it('maps streamed assistant text to the owning project', () => {
     const event = notificationToEvent(
       {
