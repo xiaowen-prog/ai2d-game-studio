@@ -1,41 +1,34 @@
-import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type MouseEvent, type PointerEvent } from 'react';
 import {
-  ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, Check,
-  ChevronRight, CircleHelp, Clock3, Download, Expand, FileArchive, FolderOpen,
-  Gamepad2, Globe2, Layers3, MapPin, MessageSquareText, Minus, MousePointer2, Plus,
-  RotateCcw, SlidersHorizontal, X,
+  ArrowLeft, ArrowRight, ArrowUpRight, Check, ChevronRight, CircleHelp,
+  Download, Expand, FileArchive, FolderOpen, Gamepad2, Globe2, Layers3,
+  LockKeyhole, MapPin, MessageSquareText, Minus, Play, Plus, Settings2, Trash2, Undo2, X,
 } from 'lucide-react';
 import forest from './assets/forest-level.png';
 import runner from './assets/forest-runner.png';
 import bamboo from '../../../docs/product/设计参考/spline-preview/assets/scene.png';
 import swordsman from '../../../docs/product/设计参考/spline-preview/assets/character-a.png';
+import {
+  applyPreviewMessage, confirmPreviewStage, newPreviewProject, openPreviewStage, selectPreviewVersion,
+  previewSteps as steps, previewSuggestions as suggestions, type PreviewProject, type PreviewVersion,
+} from './studioPreviewState';
+import {
+  PREVIEW_LIBRARY_KEY, createPreviewItem, initialPreviewLibrary, parsePreviewLibrary, previewProgress,
+  removePreviewItem, renamePreviewItem, restorePreviewItem, serializePreviewLibrary, type PreviewKind,
+} from './studioPreviewLibrary';
 import './studio-preview.css';
 
 const worlds = [
-  { name: '林间跃迁', genre: '横版闯关', image: forest, character: runner, idea: '一个清晨森林里的横版闯关游戏，主角可以二段跳，沿途收集光点。' },
-  { name: '竹影行', genre: '俯视冒险', image: bamboo, character: swordsman, idea: '一个俯视角武侠游戏，在竹林里用剑气迎战敌人。' },
+  { id: 'forest', name: '林间跃迁', genre: '横版闯关', image: forest, character: runner, idea: '一个清晨森林里的横版闯关游戏，主角可以二段跳，沿途收集光点。' },
+  { id: 'bamboo', name: '竹影行', genre: '俯视冒险', image: bamboo, character: swordsman, idea: '一个俯视角武侠游戏，在竹林里用剑气迎战敌人。' },
 ] as const;
-const steps = ['游戏方向', '角色与动作', '关卡场景', '核心试玩', '完整游戏', '导出交付'];
 const stepDetails = [
-  ['确认游戏方向', '确定玩法、风格和这一局的目标。', '把你的想法写下来，我们先一起确定游戏方向。'],
-  ['角色与动作', '检查角色外观和动作是否符合你的想法。', '主角需要清楚的轮廓，让玩家一眼就能认出来。你可以继续调整衣服、配色和动作。'],
-  ['检查关卡场景', '查看路线和角色比例，再提出修改。', '场景里已放入选中的角色。你可以继续调整光线、布局和细节。'],
-  ['核心试玩', '正式制作时，在这里打开核心试玩并提出修改。', '这一阶段关注操作手感、路线和挑战节奏。预览中展示的是关卡画面，不会启动游戏。'],
-  ['完整游戏', '串联开局、挑战与结束，让一局游戏完整。', '将已确认的角色、场景与核心玩法组合起来，再检查胜负、暂停和重新开始。'],
-  ['导出游戏', '整理确认版本，选择要导出的内容。', '正式制作台支持工程、网页游戏和压缩包。这里可以先查看导出面板的设计。'],
-];
-const suggestions = [
-  ['更轻松的玩法', '缩短单局时长'],
-  ['调整角色配色', '动作更干脆'],
-  ['让光线更柔和', '减少一些障碍'],
-  ['跳跃距离更远', '降低操作难度'],
-  ['增加胜利提示', '让节奏更紧凑'],
-  ['需要网页游戏', '保留可编辑工程'],
-];
-const versions = [
-  { number: '03', name: '晨光与层次', description: '调整光线，让远近景更清楚', filter: 'none' },
-  { number: '02', name: '柔和的林间', description: '降低饱和度，保留关卡布局', filter: 'saturate(.65) brightness(.94)' },
-  { number: '01', name: '初始场景', description: '第一版场景与角色组合', filter: 'saturate(.8) brightness(.8)' },
+  ['方向草稿', '先确定玩法与单局目标。', '想做一局怎样的游戏？下面两条示例会直接更新方向卡。'],
+  ['角色比例', '检查角色是否清楚、比例是否合适。', '可以先试着放大或缩小主角。这里调整的是已有素材在画面中的比例。'],
+  ['人物与路线', '检查主角比例和位置；路线标注仅供查看。', '主角是否足够清楚？试试放大主角或调整位置，再对比演示版本。'],
+  ['操作与手感', '试玩入口已就位，当前示例尚未接入可运行游戏。', '这里应该真正打开游戏检查操作手感。当前先演示反馈如何被记录，不改变游戏参数。'],
+  ['一局的反馈', '查看胜利与暂停界面的呈现。', '试着切换胜利和暂停界面。这是界面组合演示，不是已完成的游戏。'],
+  ['交付方式', '正式制作台会导出当前确认的游戏版本。', '此预览可以查看交付选项，不会生成工程或压缩包。'],
 ];
 
 function StudioMark({ small = false }: { small?: boolean }) {
@@ -43,201 +36,265 @@ function StudioMark({ small = false }: { small?: boolean }) {
 }
 
 type PreviewView = 'home' | 'projects' | 'studio';
-
-function readView(): PreviewView {
-  const value = new URLSearchParams(location.search).get('view');
-  return value === 'studio' || value === 'projects' ? value : 'home';
+function readRoute(): { view: PreviewView; project: string | null } {
+  const params = new URLSearchParams(location.search);
+  const project = params.get('project');
+  const value = params.get('view');
+  return { view: value === 'studio' ? project ? 'studio' : 'projects' : value === 'projects' ? 'projects' : 'home', project };
 }
-
-function viewHref(view: PreviewView) {
+function viewHref(view: PreviewView, project?: string) {
   const url = new URL(location.href);
   if (view === 'home') url.searchParams.delete('view'); else url.searchParams.set('view', view);
+  if (view === 'studio' && project) url.searchParams.set('project', project); else url.searchParams.delete('project');
   return `${url.pathname}${url.search}${url.hash}`;
+}
+function loadLibrary() {
+  try {
+    const raw = localStorage.getItem(PREVIEW_LIBRARY_KEY);
+    return { items: raw === null ? initialPreviewLibrary() : parsePreviewLibrary(raw), error: false };
+  } catch { return { items: initialPreviewLibrary(), error: true }; }
+}
+function updatedLabel(time: number | null) {
+  return time === null ? '尚未修改' : `更新于 ${new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(time)}`;
 }
 
 export function StudioPreview() {
-  const [view, setView] = useState<PreviewView>(readView);
-  const [worldIndex, setWorldIndex] = useState(0);
-  const [step, setStep] = useState(2);
+  const [route, setRoute] = useState(readRoute);
+  const [worldChoice, setWorldChoice] = useState(0);
+  const [loaded] = useState(loadLibrary);
+  const [library, setLibrary] = useState(loaded.items);
+  const [saveError, setSaveError] = useState(loaded.error);
+  const [newName, setNewName] = useState('');
+  const [newKind, setNewKind] = useState<PreviewKind>('forest');
+  const [newIdea, setNewIdea] = useState('');
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
   const [idea, setIdea] = useState('');
-  const [drafts, setDrafts] = useState<Record<number, string>>({});
-  const [messages, setMessages] = useState<{ stage: number; text: string }[]>([]);
-  const [version, setVersion] = useState(0);
   const [guides, setGuides] = useState(false);
-  const [point, setPoint] = useState(0);
   const [zoom, setZoom] = useState(100);
-  const [modal, setModal] = useState<'history' | 'export' | 'help' | 'fullscreen' | null>(null);
+  const [modal, setModal] = useState<'history' | 'export' | 'help' | 'fullscreen' | 'create' | 'manage' | 'trash' | null>(null);
   const [notice, setNotice] = useState('');
   const page = useRef<HTMLDivElement>(null);
   const ideaInput = useRef<HTMLTextAreaElement>(null);
-  const focusIdea = useRef(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const chat = useRef<HTMLDivElement>(null);
   const dialog = useRef<HTMLDialogElement>(null);
-  const world = worlds[worldIndex];
-  const draft = drafts[step] ?? '';
+  const drag = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+  const activeItem = library.find(item => item.id === route.project && item.deletedAt === null);
+  const view = route.view === 'studio' && !activeItem ? 'projects' : route.view;
+  const worldIndex = view === 'studio' ? activeItem!.kind === 'bamboo' ? 1 : 0 : worldChoice;
+  const world = { ...worlds[worldIndex], name: view === 'studio' ? activeItem!.name : worlds[worldIndex].name };
+  const fallbackProject = useRef(newPreviewProject(''));
+  const project = activeItem?.workflow ?? fallbackProject.current;
+  const step = project.stage;
+  const versions = project.versions[step];
+  const versionIndex = project.selected[step];
+  const version = versions[versionIndex];
+  const draft = project.drafts[step];
+  const activeProjects = library.filter(item => item.deletedAt === null);
+  const removedProjects = library.filter(item => item.deletedAt !== null);
   const showsScene = step >= 2 && step <= 4;
+  const visibleVersions = versions.slice(-3);
+  const sceneRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    document.title = `造境 · ${{ home: '创作大厅', projects: '我的项目', studio: '制作台' }[view]}视觉预览`;
+    document.title = `造境 · ${{ home: '创作大厅', projects: '我的项目', studio: world.name }[view]}设计预览`;
     page.current?.scrollTo({ top: 0 });
-    if (view === 'home' && focusIdea.current) {
-      ideaInput.current?.focus({ preventScroll: true });
-      focusIdea.current = false;
-    }
-  }, [view]);
-
+  }, [view, world.name]);
   useEffect(() => {
-    const restoreView = () => { setView(readView()); setModal(null); };
-    window.addEventListener('popstate', restoreView);
-    return () => window.removeEventListener('popstate', restoreView);
+    if (view === 'projects' && new URLSearchParams(location.search).get('view') === 'studio') history.replaceState(null, '', viewHref('projects'));
+  }, [route, view]);
+  useEffect(() => {
+    if (loaded.error) return; // Preserve unreadable storage instead of overwriting it.
+    try { localStorage.setItem(PREVIEW_LIBRARY_KEY, serializePreviewLibrary(library)); setSaveError(false); }
+    catch { setSaveError(true); }
+  }, [library, loaded.error]);
+  useEffect(() => {
+    const restore = () => { setRoute(readRoute()); setModal(null); };
+    window.addEventListener('popstate', restore);
+    return () => window.removeEventListener('popstate', restore);
   }, []);
-
-  function navigate(next: PreviewView) {
-    if (next === view) return;
-    history.pushState(null, '', viewHref(next));
-    setView(next);
-  }
-
-  function followLink(event: MouseEvent<HTMLAnchorElement>, next: PreviewView) {
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    event.preventDefault();
-    navigate(next);
-  }
-
-  function startProject() {
-    setIdea('');
-    if (view === 'home') {
-      page.current?.scrollTo({ top: 0 });
-      ideaInput.current?.focus({ preventScroll: true });
-    } else {
-      focusIdea.current = true;
-      navigate('home');
-    }
-  }
-
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const resize = () => page.current?.style.setProperty('--zp-viewport-height', `${viewport?.height ?? window.innerHeight}px`);
+    resize(); viewport?.addEventListener('resize', resize); window.addEventListener('resize', resize);
+    return () => { viewport?.removeEventListener('resize', resize); window.removeEventListener('resize', resize); };
+  }, []);
+  useEffect(() => {
+    setZoom(100); setGuides(false);
+    sceneRef.current?.scrollTo({ left: 0, top: 0 });
+  }, [step, activeItem?.id]);
   useEffect(() => {
     if (modal && !dialog.current?.open) dialog.current?.showModal();
     if (!modal && dialog.current?.open) dialog.current.close();
   }, [modal]);
+  useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(''), 4200); return () => clearTimeout(timer); }, [notice]);
+  useEffect(() => { chat.current?.scrollTo({ top: chat.current.scrollHeight }); }, [project.messages, step, activeItem?.id]);
 
-  useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(''), 3600); return () => clearTimeout(timer); }, [notice]);
-  useEffect(() => { chat.current?.scrollTo({ top: chat.current.scrollHeight }); }, [messages, step]);
-
-  function enterStudio(index = worldIndex, stage = 2) {
-    setWorldIndex(index); setStep(stage); navigate('studio'); setZoom(100);
+  function updateProject(update: (previous: PreviewProject) => PreviewProject, recordEdit = true) {
+    setLibrary(previous => previous.map(item => {
+      if (item.id !== activeItem?.id) return item;
+      const workflow = update(item.workflow);
+      return workflow === item.workflow ? item : { ...item, workflow, updatedAt: recordEdit ? Date.now() : item.updatedAt };
+    }));
   }
-
-  function updateDraft(text: string) { setDrafts(previous => ({ ...previous, [step]: text })); }
-  function send(event: FormEvent) {
+  function navigate(next: PreviewView, id?: string) {
+    history.pushState(null, '', viewHref(next, id)); setRoute(readRoute()); setModal(null);
+  }
+  function followLink(event: MouseEvent<HTMLAnchorElement>, next: PreviewView, id?: string) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault(); navigate(next, id);
+  }
+  function startProject(seed = '') {
+    setNewName(seed.trim().slice(0, 18)); setNewIdea(seed); setNewKind(worlds[worldChoice].id); setModal('create');
+  }
+  function createProject(event: FormEvent) {
     event.preventDefault();
-    if (!draft.trim()) return;
-    setMessages(previous => [...previous, { stage: step, text: draft.trim() }]);
-    updateDraft('');
-    setNotice('已展示这条修改意见。这是视觉预览，未调用 AI。');
+    if (!newName.trim()) return;
+    const item = createPreviewItem(newName, newKind, newIdea);
+    setLibrary(previous => [item, ...previous]); setIdea(''); navigate('projects');
+    setNotice(`已创建「${item.name}」，可以继续制作。`);
+  }
+  function enterStudio(id: string) { navigate('studio', id); }
+  function openExample() {
+    const sample = activeProjects.find(item => item.sample && item.kind === worlds[worldChoice].id);
+    if (sample) enterStudio(sample.id); else startProject(world.idea);
+  }
+  function manageProject(id: string) {
+    const item = library.find(item => item.id === id);
+    if (!item) return;
+    setEditId(id); setEditName(item.name); setModal('manage');
+  }
+  function updateDraft(text: string) {
+    updateProject(previous => { const drafts = [...previous.drafts]; drafts[previous.stage] = text; return { ...previous, drafts }; });
+  }
+  function send(event: FormEvent) { event.preventDefault(); if (draft.trim()) updateProject(previous => applyPreviewMessage(previous, draft)); }
+  function chooseVersion(index: number) {
+    if (index === versionIndex) return;
+    updateProject(previous => selectPreviewVersion(previous, index));
+    setNotice('已切换演示版本；确认此版本后才能继续后续步骤。');
+  }
+  function panStart(event: PointerEvent<HTMLDivElement>) {
+    if (event.pointerType !== 'mouse' || event.button !== 0 || zoom === 100) return;
+    const element = event.currentTarget;
+    drag.current = { x: event.clientX, y: event.clientY, left: element.scrollLeft, top: element.scrollTop };
+    element.setPointerCapture(event.pointerId); event.preventDefault();
+  }
+  function panMove(event: PointerEvent<HTMLDivElement>) {
+    if (!drag.current) return;
+    event.currentTarget.scrollLeft = drag.current.left + drag.current.x - event.clientX;
+    event.currentTarget.scrollTop = drag.current.top + drag.current.y - event.clientY;
+  }
+  function panEnd(event: PointerEvent<HTMLDivElement>) {
+    drag.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   }
 
-  function renderProjects(includeNew = false) {
-    return <div className="zp-project-grid">
-      {worlds.map((item, index) => <button className="zp-project-card" key={item.name} onClick={() => enterStudio(index)}>
-        <div className="zp-project-image"><img src={item.image} alt="" /><span className="zp-project-arrow"><ArrowUpRight size={23} /></span></div>
-        <div className="zp-project-info"><div><span>{item.genre}</span><h3>{item.name}</h3></div><p>关卡场景 <ChevronRight size={15} /></p></div>
-      </button>)}
-      {includeNew && <button className="zp-new-project" onClick={startProject}><span><Plus size={28} /></span><h3>新建项目</h3><p>从一个新想法开始 <ArrowUpRight size={17} /></p></button>}
+  function keepComposerLayout(event: PointerEvent<HTMLDivElement>) {
+    // Keep the focused-input layout stable until the button's click is handled.
+    // Otherwise blur can move the button between pointer-down and pointer-up.
+    if (event.button === 0 && document.activeElement === input.current
+      && event.target instanceof Element && event.target.closest('.zp-work-grid button')) event.preventDefault();
+  }
+
+  function renderProjects(recent = false) {
+    const items = recent ? activeProjects.slice(0, 2) : activeProjects;
+    return <div className="zp-project-grid">{items.map(item => {
+      const progress = previewProgress(item.workflow);
+      const template = worlds[item.kind === 'bamboo' ? 1 : 0];
+      return <article className="zp-project-card" key={item.id} aria-label={`${item.name}项目`}>
+        <a className="zp-project-open" href={viewHref('studio', item.id)} onClick={event => followLink(event, 'studio', item.id)} aria-label={`继续制作 ${item.name}`}>
+          <div className={`zp-project-image ${item.sample ? '' : `zp-project-placeholder zp-placeholder-${item.kind}`}`}>
+            {item.sample ? <img src={template.image} alt="" /> : <><Gamepad2 size={38} /><span>方向草稿</span></>}
+            {item.sample && <span className="zp-sample-label">示例</span>}
+          </div>
+          <div className="zp-project-info"><span className="zp-project-genre">{template.genre}</span><h3>{item.name}</h3>
+            <p className="zp-project-progress">第 {progress.step}/6 步 · {progress.label}</p><span className={`zp-project-status ${progress.status === '已确认' ? 'is-confirmed' : ''}`}>{progress.status}</span>
+            <div className="zp-project-meter" aria-hidden="true">{steps.map((_, index) => <i key={index} className={index <= item.workflow.confirmedThrough ? 'done' : index === item.workflow.stage ? 'current' : ''} />)}</div>
+            <time dateTime={item.updatedAt === null ? undefined : new Date(item.updatedAt).toISOString()}>{updatedLabel(item.updatedAt)}</time>
+          </div>
+        </a>
+        <footer><a href={viewHref('studio', item.id)} onClick={event => followLink(event, 'studio', item.id)}>继续制作 <ArrowRight size={15} /></a><button aria-label={`管理 ${item.name}`} onClick={() => manageProject(item.id)}><Settings2 size={14} />管理</button></footer>
+      </article>;
+    })}<button className="zp-new-project" onClick={() => startProject()}><span><Plus size={28} /></span><h3>新建项目</h3><p>给下一个游戏，留一个位置 <ArrowRight size={17} /></p></button></div>;
+  }
+
+  function renderComposition(item: PreviewVersion, thumbnail = false) {
+    return <div className={`zp-composition ${worldIndex === 1 ? 'zp-scene-topdown' : ''} ${thumbnail ? 'zp-composition-thumb' : ''}`}>
+      <img className="zp-scene-background" draggable={false} src={world.image} alt={thumbnail ? '' : `${world.name}已有场景素材`} />
+      <img className="zp-scene-runner" draggable={false} src={world.character} alt={thumbnail ? '' : '场景中的角色'} style={{ left: `${item.left}%`, transform: `scale(${item.size})` }} />
+      {guides && !thumbnail && <div className="zp-scene-guides" aria-label="只读路线标注"><svg viewBox="0 0 1000 560" preserveAspectRatio="none" aria-hidden="true"><path d="M175 428 Q350 190 500 340 T840 220" /></svg>{['起点', worldIndex === 0 ? '跳跃区' : '交战区', '终点'].map((name, index) => <span className={`zp-marker zp-marker-${index}`} key={name}>{name}</span>)}</div>}
+      {step === 4 && item.overlay && <div className="zp-game-overlay"><span>界面演示</span><strong>{item.overlay === 'victory' ? '抵达新的风景' : '稍作休息'}</strong><p>{item.overlay === 'victory' ? '这一段旅程，完成了。' : '游戏已暂停的界面样式'}</p></div>}
     </div>;
   }
-
   function renderScene(large = false) {
-    return <div className={`zp-scene ${large ? 'zp-scene-large' : ''} ${worldIndex === 1 ? 'zp-scene-topdown' : ''}`}>
-      <div className="zp-scene-picture" style={{ transform: `scale(${zoom / 100})`, filter: versions[version].filter }}>
-        <img className="zp-scene-background" src={world.image} alt={`${world.name}已有场景素材`} />
-        <img className="zp-scene-runner" src={world.character} alt="场景中的角色" />
-      </div>
-      {guides && <div className="zp-scene-guides" aria-label="关卡标记示例">
-        <svg viewBox="0 0 1000 560" preserveAspectRatio="none" aria-hidden="true"><path d="M175 428 Q350 190 500 340 T840 220" /></svg>
-        {['起点', '跳跃区', '终点'].map((name, index) => <button className={`zp-marker zp-marker-${index}`} key={name} aria-pressed={point === index} onClick={() => setPoint(index)}>{name}</button>)}
-      </div>}
+    return <div ref={large ? undefined : sceneRef} className={`zp-scene ${zoom > 100 ? 'zp-scene-zoomed' : ''}`} tabIndex={zoom > 100 ? 0 : undefined} aria-label={zoom > 100 ? '放大画面，可拖动或用方向键查看' : undefined}
+      onPointerDown={panStart} onPointerMove={panMove} onPointerUp={panEnd} onPointerCancel={panEnd} onLostPointerCapture={() => { drag.current = null; }}>
+      <div className="zp-scene-picture" style={{ width: `${zoom}%`, height: `${zoom}%` }}>{renderComposition(version)}</div>
     </div>;
   }
+  function renderVersionThumb(item: PreviewVersion) {
+    return showsScene ? <span className="zp-version-thumbnail">{renderComposition(item, true)}</span>
+      : step === 1 ? <span className="zp-version-thumbnail zp-version-character"><img src={world.character} alt="" style={{ transform: `scale(${item.size})` }} /></span>
+        : <span className="zp-version-note"><Layers3 size={16} /></span>;
+  }
 
-  return <div className={`zp zp-view-${view}`} ref={page}>
-    <header className="zp-header">
-      <button className="zp-brand" aria-label="造境，返回创作大厅" onClick={() => navigate('home')}><StudioMark /><strong>造境</strong></button>
-      <nav className="zp-nav" aria-label="主要导航">
-        {([['home', '创作大厅'], ['projects', '我的项目'], ['studio', '制作台']] as const).map(([target, label]) => <a key={target} href={viewHref(target)} aria-current={view === target ? 'page' : undefined} onClick={event => followLink(event, target)}>{label}</a>)}
-      </nav>
-      <div className="zp-header-end"><button className="zp-preview-badge" aria-label="设计预览说明" title="关于此预览" onClick={() => setModal('help')}><span className="zp-preview-label">设计预览</span><CircleHelp size={15} /></button></div>
+  return <div className={`zp zp-view-${view}`} ref={page} onPointerDownCapture={keepComposerLayout}>
+    <header className="zp-header"><button className="zp-brand" aria-label="造境，返回创作大厅" onClick={() => navigate('home')}><StudioMark /><strong>造境</strong></button>
+      <nav className="zp-nav" aria-label="主要导航">{([['home', '创作大厅'], ['projects', '我的项目']] as const).map(([target, label]) => <a key={target} href={viewHref(target)} aria-current={view === target ? 'page' : undefined} onClick={event => followLink(event, target)}>{label}</a>)}</nav>
+      <div className="zp-header-end"><button className="zp-preview-badge" aria-label="设计预览说明" onClick={() => setModal('help')}><span className="zp-preview-label">设计预览</span><CircleHelp size={15} /></button></div>
     </header>
-
     {view === 'home' ? <main>
-      <section className="zp-home-hero">
-        <div className="zp-hero-copy">
-          <h1>把脑海里的世界，<br />做成能玩的游戏。</h1>
-          <p className="zp-hero-description">用一句话描述想法，和 AI 一起完成角色、关卡与游戏。</p>
-          <form className="zp-idea" onSubmit={event => { event.preventDefault(); enterStudio(worldIndex, 0); }}>
-            <label htmlFor="zp-idea-input">想做什么样的游戏？</label>
-            <textarea ref={ideaInput} id="zp-idea-input" value={idea} onChange={event => setIdea(event.target.value)} placeholder="例如：在清晨的森林里，做一个可以二段跳的闯关游戏…" rows={2} />
-            <div className="zp-idea-bottom"><div className="zp-genre-toggle" aria-label="游戏类型">{worlds.map((item, index) => <button key={item.genre} type="button" aria-pressed={worldIndex === index} onClick={() => setWorldIndex(index)}><Gamepad2 size={13} />{item.genre}</button>)}</div><button className="zp-primary" type="submit">开始构思 <ArrowUpRight size={17} /></button></div>
-          </form>
+      <section className="zp-home-hero"><div className="zp-hero-copy"><h1>把脑海里的世界，<br />做成能玩的游戏。</h1><p className="zp-hero-description">用一句话描述想法，和 AI 一起完成角色、关卡与游戏。</p>
+        <form className="zp-idea" onSubmit={event => { event.preventDefault(); startProject(idea); }}>
+          <label htmlFor="zp-idea-input">想做什么样的游戏？</label><textarea ref={ideaInput} id="zp-idea-input" value={idea} onChange={event => setIdea(event.target.value)} placeholder="例如：在清晨的森林里，做一个可以二段跳的闯关游戏…" rows={2} />
+          <div className="zp-idea-bottom"><div className="zp-genre-toggle" aria-label="游戏类型">{worlds.map((item, index) => <button key={item.genre} type="button" aria-pressed={worldChoice === index} onClick={() => setWorldChoice(index)}><Gamepad2 size={13} />{item.genre}</button>)}</div><button className="zp-primary" type="submit">创建项目 <ArrowUpRight size={17} /></button></div>
+        </form></div><div className="zp-hero-art"><div className="zp-art-window" key={world.id}><img className="zp-hero-landscape" src={world.image} alt={`${world.name}场景作品`} /><div className="zp-art-shade" /><div className="zp-art-caption"><span>{world.genre}</span><h2>{world.name}</h2></div><button className="zp-art-open" onClick={openExample}>打开示例制作台 <ArrowUpRight size={20} /></button></div></div></section>
+      <section className="zp-projects"><header className="zp-section-heading"><h2>最近的项目</h2><a className="zp-projects-link" href={viewHref('projects')} onClick={event => followLink(event, 'projects')}>查看全部 <ArrowRight size={17} /></a></header>{renderProjects(true)}</section>
+    </main> : view === 'projects' ? <main className="zp-project-library"><header className="zp-library-heading"><div><h1>我的项目</h1><p>{activeProjects.length} 个项目 · 预览记录保存在此浏览器</p></div><div className="zp-library-actions">{removedProjects.length > 0 && <button className="zp-trash-link" onClick={() => setModal('trash')}><Trash2 size={15} />最近删除 · {removedProjects.length}</button>}<button className="zp-primary" onClick={() => startProject()}><Plus size={18} />新建项目</button></div></header>{saveError && <p className="zp-storage-error" role="alert">浏览器保存不可用，本次更改尚未保存；原有记录未覆盖，请先不要关闭页面。</p>}{renderProjects()}</main>
+      : <main className="zp-workspace">
+        <div className="zp-project-bar"><div className="zp-project-breadcrumb"><button aria-label="返回我的项目" onClick={() => navigate('projects')}><ArrowLeft size={18} /></button><a href={viewHref('projects')} onClick={event => followLink(event, 'projects')}>我的项目</a><ChevronRight size={14} /><strong>{world.name}</strong><span className="zp-project-type">{world.genre}{activeItem?.sample ? ' · 示例' : ' · 预览项目'}</span></div><button className="zp-export-button" onClick={() => setModal('export')}><Download size={15} />导出说明</button></div>
+        <nav className="zp-stepper" aria-label="制作步骤">{steps.map((label, index) => <button key={label} aria-current={step === index ? 'step' : undefined} disabled={index > project.confirmedThrough + 1} title={index > project.confirmedThrough + 1 ? '确认前一步后开放' : undefined} onClick={() => updateProject(previous => openPreviewStage(previous, index), false)}>
+          <span className={`zp-step-index ${index <= project.confirmedThrough ? 'zp-step-before' : ''}`}>{index <= project.confirmedThrough ? <Check size={13} /> : index + 1}</span><strong>{label}</strong>{step === index && <span className="zp-current-step">当前</span>}</button>)}</nav>
+        <div className="zp-work-grid">
+          <section className="zp-preview-area" aria-label="成果预览">
+            <header className="zp-canvas-toolbar"><span className="zp-canvas-tab"><Layers3 size={15} />{stepDetails[step][0]}</span><div>{showsScene && <button aria-pressed={guides} onClick={() => setGuides(!guides)}><MapPin size={15} />路线标注</button>}{step >= 1 && step <= 4 && <button onClick={() => setModal('fullscreen')}><Expand size={15} />放大查看</button>}</div></header>
+            {showsScene && <div className="zp-playbar"><button disabled aria-describedby="zp-play-reason"><Play size={15} />试玩</button><span id="zp-play-reason">{step === 2 ? '确认场景后进入核心试玩；示例未接游戏' : '示例未接入游戏，请在正式制作台试玩'}</span></div>}
+            <div className="zp-canvas-well">
+              {step === 0 ? <article className="zp-direction"><span>游戏方向 · 草稿</span><h2>{world.name}</h2><p>{project.idea}</p><div><span><Gamepad2 size={16} />{world.genre}</span><span><Layers3 size={16} />2D 世界</span></div><hr /><h3>{version.note || (worldIndex === 0 ? '探索、跳跃，抵达更远的地方。' : '移动、出招，在竹影中迎战。')}</h3></article>
+                : step === 1 ? <div className="zp-character-sheet"><div className="zp-character-image"><img src={world.character} alt="已有角色素材展示" style={{ transform: `scale(${version.size})` }} /></div><div><h2>角色外观</h2><p>比例 {Math.round(version.size * 100)}%</p><span className="zp-character-caption">已有素材 · 尚未编辑原图</span></div></div>
+                  : step === 5 ? <div className="zp-delivery-card"><FileArchive size={32} /><h2>让作品走出制作台</h2><p>这里展示交付方式。<br />实际文件在正式制作台生成。</p><button className="zp-primary" onClick={() => setModal('export')}>查看导出方式 <ArrowUpRight size={17} /></button></div> : renderScene()}
+            </div>
+            <div className="zp-canvas-bottomline"><span>{showsScene ? version.note || (guides ? '路线标注为只读参考' : `主角比例 ${Math.round(version.size * 100)}%${zoom > 100 ? ' · 拖动查看' : ''}`) : stepDetails[step][1]}</span>{showsScene && <div className="zp-zoom"><button aria-label="缩小画面" disabled={zoom <= 100} onClick={() => setZoom(value => value - 25)}><Minus size={14} /></button><button aria-label="适应画布" onClick={() => { setZoom(100); sceneRef.current?.scrollTo({ left: 0, top: 0 }); }}>{zoom === 100 ? '适应' : `${zoom}%`}</button><button aria-label="放大画面" disabled={zoom >= 200} onClick={() => setZoom(value => value + 25)}><Plus size={14} /></button></div>}</div>
+            {step !== 5 && <div className="zp-versions-strip"><div className="zp-version-heading"><strong>{step === 2 ? '场景演示版本' : '演示版本'}</strong><button onClick={() => setModal('history')}>全部版本 · {versions.length} <ChevronRight size={13} /></button></div><div className="zp-version-items">{visibleVersions.map(item => <button key={item.id} aria-label={`切换演示 v${String(item.id).padStart(2, '0')} ${item.label}`} aria-pressed={version.id === item.id} onClick={() => chooseVersion(versions.indexOf(item))}>{renderVersionThumb(item)}<span><strong>v{String(item.id).padStart(2, '0')}</strong><small>{item.label}</small></span>{version.id === item.id && <Check size={13} />}</button>)}</div></div>}
+          </section>
+          <aside className="zp-assistant" aria-label="AI 对话设计预览"><header><MessageSquareText size={19} /><h2>AI 制作搭档</h2><span>本地演示</span></header>
+            <div className="zp-chat-scroll" ref={chat}><div className="zp-chat-intro" key={`${world.id}-${step}`}><div className="zp-chat-author"><StudioMark small /><strong>造境</strong></div><p>{stepDetails[step][2]}</p></div>{project.messages.filter(item => item.stage === step).map((item, index) => <div className="zp-message-pair" key={`${step}-${index}`}><div className="zp-user-message">{item.request}</div><p className={item.applied ? 'zp-applied-message' : ''}>{item.applied && <Check size={14} />}{item.reply}</p></div>)}</div>
+            <div className="zp-chat-controls">{suggestions[step].length > 0 && <div className="zp-suggestions" aria-label="点击立即应用演示修改">{suggestions[step].map(text => <button key={text} onClick={() => updateProject(previous => applyPreviewMessage(previous, text))}>{text}<ArrowUpRight size={13} /></button>)}</div>}
+              {step !== 5 && <form className="zp-composer" onSubmit={send}><textarea ref={input} aria-label="输入演示修改意见" placeholder="试试上方示例；自由描述需连接 AI" value={draft} onChange={event => updateDraft(event.target.value)} rows={2} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><div><span>仅更新本页演示</span><button type="submit" disabled={!draft.trim()}>发送修改 <ArrowRight size={15} /></button></div></form>}
+              <div className="zp-confirm-row"><span>{step === 5 ? '实际导出在正式制作台完成' : project.confirmedThrough >= step ? '本步已在演示中确认' : '确认仅用于本页流程演示'}</span>{step !== 5 && <button onClick={() => updateProject(confirmPreviewStage)}>确认本步，继续 <ArrowRight size={15} /></button>}</div>
+            </div>
+          </aside>
         </div>
-        <div className="zp-hero-art">
-          <div className="zp-art-window" key={world.name}>
-            <img className="zp-hero-landscape" src={world.image} alt={`${world.name}场景作品`} />
-            <div className="zp-art-shade" />
-            <div className="zp-art-caption"><span>{world.genre}</span><h2>{world.name}</h2></div>
-            <button className="zp-art-open" aria-label={`打开${world.name}示例制作台`} onClick={() => enterStudio()}>打开制作台 <ArrowUpRight size={20} /></button>
-          </div>
-        </div>
-      </section>
-
-      <section className="zp-projects">
-        <header className="zp-section-heading"><h2>最近的项目</h2><a className="zp-projects-link" href={viewHref('projects')} onClick={event => followLink(event, 'projects')}>查看全部 <ArrowRight size={17} /></a></header>
-        {renderProjects(true)}
-      </section>
-    </main> : view === 'projects' ? <main className="zp-project-library">
-      <header className="zp-library-heading"><div><h1>我的项目</h1><p>当前展示两个示例项目，选择一个继续查看制作台。</p></div><button className="zp-primary" onClick={startProject}><Plus size={18} />新建项目</button></header>
-      {renderProjects()}
-    </main> : <main className="zp-workspace">
-      <div className="zp-project-bar"><div className="zp-project-breadcrumb"><button aria-label="返回我的项目" onClick={() => navigate('projects')}><ArrowLeft size={18} /></button><a href={viewHref('projects')} onClick={event => followLink(event, 'projects')}>我的项目</a><ChevronRight size={14} /><strong>{world.name}</strong><span className="zp-project-type">{world.genre} · 示例</span></div><div className="zp-project-actions"><button onClick={() => setModal('history')}><Clock3 size={15} />历史版本</button><button className="zp-export-button" onClick={() => setModal('export')}><Download size={15} />导出</button></div></div>
-      <nav className="zp-stepper" aria-label="制作步骤">
-        {steps.map((label, index) => <button key={label} aria-current={step === index ? 'step' : undefined} onClick={() => { setStep(index); setZoom(100); }}><span className={`zp-step-index ${index < step ? 'zp-step-before' : ''}`}>{index < step ? <Check size={13} /> : index + 1}</span><strong>{label}</strong>{step === index && <span className="zp-current-step">当前</span>}</button>)}
-      </nav>
-      <div className="zp-work-grid">
-        <section className="zp-preview-area" aria-label="成果预览">
-          <header className="zp-canvas-toolbar"><div><span className="zp-canvas-tab"><Layers3 size={14} />{step === 1 ? '角色预览' : step === 0 ? '方向卡' : step === 5 ? '交付预览' : '关卡预览'}</span><span className="zp-canvas-filename">{world.name}{showsScene && <> <span>/</span> v{versions[version].number}</>}</span></div><div>{showsScene && <button className={guides ? 'selected' : ''} aria-label="显示关卡标记" aria-pressed={guides} onClick={() => setGuides(!guides)}><MapPin size={15} /></button>}{step >= 1 && step <= 4 && <button aria-label="放大查看成果" onClick={() => setModal('fullscreen')}><Expand size={16} /></button>}</div></header>
-          <div className="zp-canvas-well">
-            {step === 0 ? <article className="zp-direction"><h2>{world.name}</h2><p>{idea || world.idea}</p><div><span><Gamepad2 size={16} />{world.genre}</span><span><Layers3 size={16} />2D 世界</span></div><hr /><small>核心体验</small><h3>{worldIndex === 0 ? '探索、跳跃，抵达更远的地方。' : '移动、出招，在竹影中迎战。'}</h3></article>
-            : step === 1 ? <div className="zp-character-sheet"><div className="zp-character-image"><img src={world.character} alt="已有角色素材展示" /></div><div><h2>角色外观</h2><p>查看角色比例和配色，<br />在右侧提出修改。</p><span className="zp-character-caption">角色图 · 已有素材</span></div></div>
-            : step === 5 ? <div className="zp-delivery-card"><h2>导出游戏</h2><p>选择导出格式，保存当前确认的游戏版本。</p><button className="zp-primary" onClick={() => setModal('export')}>查看导出面板 <ArrowUpRight size={17} /></button></div>
-            : renderScene()}
-            {showsScene && <div className="zp-canvas-bottomline"><span><MousePointer2 size={13} />{guides ? ['起点：进入关卡的位置', '跳跃区：调整挑战节奏', '终点：完成本局的目标'][point] : '场景素材组合 · 未运行游戏'}</span><div className="zp-zoom"><button aria-label="缩小画面" disabled={zoom <= 80} onClick={() => setZoom(value => value - 10)}><Minus size={13} /></button><button aria-label="恢复百分之百" onClick={() => setZoom(100)}>{zoom}%</button><button aria-label="放大画面" disabled={zoom >= 130} onClick={() => setZoom(value => value + 10)}><Plus size={13} /></button></div></div>}
-          </div>
-          <div className="zp-scene-summary"><div><h2>{stepDetails[step][0]}</h2><p>{stepDetails[step][1]}</p></div><button aria-label="查看版本与调整记录" onClick={() => setModal('history')}><SlidersHorizontal size={19} /></button></div>
-          {step === 2 && <div className="zp-versions-strip"><span>场景版本</span>{versions.map((item, index) => <button key={item.number} aria-pressed={version === index} onClick={() => setVersion(index)}><img src={world.image} style={{ filter: item.filter }} alt="" /><span><strong>v{item.number}</strong><small>{item.name}</small></span>{version === index && <Check size={13} />}</button>)}</div>}
-        </section>
-        <aside className="zp-assistant" aria-label="AI 对话设计预览">
-          <header><MessageSquareText size={20} /><div><h2>AI 制作搭档</h2><p>随时提出你的修改意见。</p></div></header>
-          <div className="zp-chat-scroll" ref={chat}>
-            <div className="zp-chat-author"><StudioMark small /><strong>造境</strong></div>
-            <div className="zp-chat-intro" key={`intro-${step}`}><h3>{stepDetails[step][0]}</h3><p>{stepDetails[step][2]}</p></div>
-            {step >= 1 && step <= 4 && <button className="zp-chat-artifact" onClick={() => setModal('fullscreen')}><img src={step === 1 ? world.character : world.image} alt="" /><span><strong>{world.name}</strong><small>{steps[step]} · 查看成果</small></span><ArrowUpRight size={15} /></button>}
-            {messages.filter(item => item.stage === step).map((item, index) => <div className="zp-message-pair" key={`${step}-${index}`}><div className="zp-user-message">{item.text}</div><p>修改意见已展示，未执行生成。</p></div>)}
-          </div>
-          <div className="zp-chat-controls"><div className="zp-suggestions">{suggestions[step].map(text => <button key={text} onClick={() => { updateDraft(text); input.current?.focus(); }}>{text}</button>)}</div>
-            <form className="zp-composer" onSubmit={send}><textarea ref={input} aria-label="输入修改意见" placeholder="告诉我，你想改哪里…" value={draft} onChange={event => updateDraft(event.target.value)} rows={3} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><div><span>Enter 发送，Shift+Enter 换行</span><button type="submit" aria-label="发送示例修改意见" disabled={!draft.trim()}><ArrowUp size={18} /></button></div></form>
-            <button className="zp-next-step" onClick={() => step === 5 ? setModal('export') : setStep(step + 1)}>{step === 5 ? '查看导出选项' : '查看下一步'}<ArrowRight size={16} /></button><p className="zp-demo-note">本页仅演示界面，不执行生成。</p>
-          </div>
-        </aside>
-      </div>
-    </main>}
-
-    {notice && <div className="zp-toast" role="status"><Check size={16} />{notice}</div>}
+      </main>}
+    {(notice || saveError) && <div className="zp-toast" role={saveError ? "alert" : "status"}>{saveError ? "浏览器保存不可用，更改暂存在此页；请先不要关闭。" : notice}</div>}
     <dialog ref={dialog} className={`zp-dialog ${modal === 'fullscreen' ? 'zp-dialog-wide' : ''}`} onCancel={() => setModal(null)} onClose={() => setModal(null)} onClick={event => { if (event.target === event.currentTarget) setModal(null); }}>
-      <header><div><h2>{modal === 'history' ? '历史版本' : modal === 'export' ? '导出游戏' : modal === 'fullscreen' ? `${world.name} · 成果预览` : '关于此预览'}</h2></div><button aria-label="关闭面板" onClick={() => setModal(null)}><X size={20} /></button></header>
-      {modal === 'history' && <div className="zp-history-content"><p>选择一个示例版本，查看画面的变化。</p>{versions.map((item, index) => <button className={version === index ? 'active' : ''} key={item.number} onClick={() => { setVersion(index); setModal(null); setNotice(`已切换至示例 v${item.number}，旧项目未发生改变。`); }}><img src={world.image} alt="" style={{ filter: item.filter }} /><div><strong>v{item.number} · {item.name}</strong><p>{item.description}</p></div>{version === index ? <Check size={18} /> : <RotateCcw size={17} />}</button>)}<small>这里仅演示版本面板，不会恢复或覆盖你的真实项目。</small></div>}
-      {modal === 'export' && <div className="zp-export-content"><p>支持以下三种导出方式。</p>{[{ icon: FolderOpen, name: 'Godot 工程', note: '继续编辑角色、场景与游戏逻辑', ext: '.godot' }, { icon: Globe2, name: '网页游戏', note: '在浏览器中打开与游玩', ext: 'HTML' }, { icon: FileArchive, name: '完整压缩包', note: '游戏文件与打开说明一起打包', ext: '.zip' }].map(({ icon: Icon, name, note, ext }) => <div className="zp-export-option" key={name}><Icon size={23} /><div><h3>{name}</h3><p>{note}</p></div><span>{ext}</span></div>)}<div className="zp-export-note"><CircleHelp size={16} />这是导出面板的设计预览，实际导出请使用原制作台。</div></div>}
-      {modal === 'help' && <div className="zp-help-content"><p>这是「造境」的新视觉预览，包含创作大厅、独立项目页、六个制作步骤、AI 对话区、版本面板与导出面板。</p><p>场景与角色复用已有素材，示例交互只在当前页面中生效。真实生成、项目保存、试玩与导出仍使用原制作台。</p><button className="zp-primary" onClick={() => setModal(null)}>开始看看 <ArrowRight size={16} /></button></div>}
-      {modal === 'fullscreen' && <div className="zp-fullscreen-content">{step === 1 ? <img className="zp-full-character" src={world.character} alt="角色原图" /> : renderScene(true)}</div>}
+      <header><h2>{modal === 'create' ? '新建项目' : modal === 'manage' ? '管理项目' : modal === 'trash' ? '最近删除' : modal === 'history' ? `${steps[step]} · 演示版本` : modal === 'export' ? '导出说明' : modal === 'fullscreen' ? `${world.name} · 放大查看` : '关于此预览'}</h2><button aria-label="关闭面板" onClick={() => setModal(null)}><X size={20} /></button></header>
+      {modal === 'create' && <form className="zp-project-form" onSubmit={createProject}>
+        <label htmlFor="zp-new-name">项目名称</label><input id="zp-new-name" autoFocus required maxLength={40} value={newName} onChange={event => setNewName(event.target.value)} placeholder="给你的游戏起个名字" />
+        <fieldset><legend>游戏类型</legend><div className="zp-create-genres">{worlds.map(item => <label key={item.id}><input type="radio" name="project-kind" value={item.id} checked={newKind === item.id} onChange={() => setNewKind(item.id)} /><Gamepad2 size={16} />{item.genre}</label>)}</div></fieldset>
+        <label htmlFor="zp-new-idea">游戏想法 <span>选填</span></label><textarea id="zp-new-idea" rows={3} value={newIdea} onChange={event => setNewIdea(event.target.value)} placeholder="想让玩家在什么世界里，做什么事？" />
+        <p>创建独立的本机预览项目，不会覆盖已有项目。</p><div className="zp-form-actions"><button type="button" onClick={() => setModal(null)}>取消</button><button className="zp-primary" type="submit" disabled={!newName.trim()}>创建项目 <Plus size={16} /></button></div>
+      </form>}
+      {modal === 'manage' && <form className="zp-project-form" onSubmit={event => { event.preventDefault(); if (!editId || !editName.trim()) return; setLibrary(previous => renamePreviewItem(previous, editId, editName)); setModal(null); setNotice('项目名称已更新。'); }}>
+        <label htmlFor="zp-edit-name">项目名称</label><input id="zp-edit-name" autoFocus required maxLength={40} value={editName} onChange={event => setEditName(event.target.value)} />
+        <div className="zp-form-actions"><button className="zp-delete-project" type="button" onClick={() => { if (!editId) return; setLibrary(previous => removePreviewItem(previous, editId)); setModal(null); setNotice('项目已移到最近删除，可随时恢复。'); }}><Trash2 size={16} />删除项目</button><button className="zp-primary" type="submit" disabled={!editName.trim()}>保存名称 <Check size={16} /></button></div><p>删除后可从「最近删除」恢复，步骤和版本会一起保留。</p>
+      </form>}
+      {modal === 'trash' && <div className="zp-trash-content"><p>删除的预览项目保留在这里，可以随时恢复。</p>{removedProjects.length === 0 ? <p>没有已删除的项目。</p> : removedProjects.map(item => <div key={item.id}><strong>{item.name}</strong><button onClick={() => { setLibrary(previous => restorePreviewItem(previous, item.id)); setNotice(`已恢复「${item.name}」。`); }} aria-label={`恢复 ${item.name}`}><Undo2 size={15} />恢复</button></div>)}</div>}
+      {modal === 'history' && <div className="zp-history-content"><p>只有实际应用过的演示修改才会新增版本。选择后可以继续修改，原版本仍保留。</p>{versions.map((item, index) => <button className={versionIndex === index ? 'active' : ''} key={item.id} onClick={() => { chooseVersion(index); setModal(null); }}>{renderVersionThumb(item)}<div><strong>v{String(item.id).padStart(2, '0')} · {item.label}</strong><p>{showsScene || step === 1 ? `主角比例 ${Math.round(item.size * 100)}%` : item.note || '初始示例内容'}</p></div>{versionIndex === index && <Check size={18} />}</button>)}<small>仅切换本页演示，不恢复或覆盖真实项目。演示记录保存在当前浏览器，刷新后可继续。</small></div>}
+      {modal === 'export' && <div className="zp-export-content"><p>这是交付方式预览，当前没有可下载的游戏文件。</p>{[{ icon: FolderOpen, name: 'Godot 工程', note: '继续编辑角色、场景与游戏逻辑', ext: '.godot' }, { icon: Globe2, name: '网页游戏', note: '在浏览器中打开与游玩', ext: 'HTML' }, { icon: FileArchive, name: '完整压缩包', note: '游戏文件与打开说明一起打包', ext: '.zip' }].map(({ icon: Icon, name, note, ext }) => <div className="zp-export-option" key={name}><Icon size={23} /><div><h3>{name}</h3><p>{note}</p></div><span>{ext}</span></div>)}<div className="zp-export-note"><LockKeyhole size={16} />在正式制作台确认完整游戏后，再执行真实导出。</div></div>}
+      {modal === 'help' && <div className="zp-help-content"><p>这是「造境」的交互设计预览。示例项目从方向待确认开始，只有你点击确认，后面的步骤才会开放。</p><p>快捷建议会直接应用本地演示修改，形成可对比的版本；自由描述不会被假装成 AI 已完成。路线标记是只读参考，放大后可拖动画面。</p><p>预览不连接模型、不运行游戏、不修改真实项目。演示进度按项目隔离，保存在当前浏览器，刷新后仍可继续；不跨浏览器同步。真实试玩与导出请使用正式制作台。</p><button className="zp-primary" onClick={() => setModal(null)}>知道了 <ArrowRight size={16} /></button></div>}
+      {modal === 'fullscreen' && <div className="zp-fullscreen-content">{step === 1 ? <img className="zp-full-character" src={world.character} alt="角色原图" /> : renderScene(true)}{showsScene && <div className="zp-fullscreen-controls"><button disabled={zoom <= 100} onClick={() => setZoom(value => value - 25)}><Minus size={15} />缩小</button><span>{zoom}% · 放大后可拖动</span><button disabled={zoom >= 200} onClick={() => setZoom(value => value + 25)}>放大<Plus size={15} /></button></div>}</div>}
     </dialog>
   </div>;
 }
