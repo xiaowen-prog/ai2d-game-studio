@@ -13,7 +13,7 @@ const resources = join(app, 'Contents/Resources');
 const archive = join(resources, 'app.asar');
 const entries = asar.listPackage(archive).map(path => path.replace(/^\//u, ''));
 const required = ['dist/main/main.js', 'dist/main/preload.cjs', 'dist/renderer/index.html',
-  'dist/main/creationWorkflowService.js', 'dist/main/creationDelivery.js',
+  'dist/main/creationWorkflowService.js', 'dist/main/creationDelivery.js', 'dist/main/zipArchive.js', 'node_modules/fflate/package.json',
   'node_modules/@openai/codex-darwin-arm64/package.json', 'node_modules/pngjs/package.json', 'node_modules/parse5/package.json'];
 for (const path of required) if (!entries.includes(path)) throw Error(`安装包缺少 ${path}`);
 const privateEntry = entries.find(path => /(?:^|\/)(?:\.noobi-private|\.git|codex-home|auth\.json|projects\.json|media-providers\.json|\.env(?:\.[^/]*)?)(?:\/|$)/iu.test(path));

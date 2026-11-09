@@ -158,7 +158,7 @@ export function EnvironmentSettings({ onMessage }: EnvironmentSettingsProps) {
       {snapshot && !snapshot.canExportGodotProjects ? <section className="environment-install-guide" aria-label="准备游戏引擎">
         <h4>让游戏能预览，还差这些准备</h4>
         <ol>
-          <li>安装 Godot 4 标准版。首次使用可选 <a href="https://godotengine.org/download/archive/4.5.1-stable/" target="_blank" rel="noreferrer">Godot 官方 4.5.1 下载页</a>，将 Godot 放进“应用程序”。已有 Godot 可直接点下方“选择程序”。</li>
+          <li>下载 <a href="https://godotengine.org/download/archive/4.5.1-stable/" target="_blank" rel="noreferrer">Godot 4.5.1 标准版</a>：Windows 解压到固定文件夹，点下方“选择程序”选中 Godot 的 .exe；Mac 放进“应用程序”。已有 Godot 4 可直接选择。</li>
           <li>打开 Godot，在“编辑器 → 管理导出模板”下载并安装与引擎同版本的模板。<a href="https://docs.godotengine.org/zh-cn/stable/tutorials/export/exporting_projects.html" target="_blank" rel="noreferrer">查看官方说明</a></li>
           <li>回来点“重新检查”。游戏引擎和网页导出模板均就绪，就可以开始制作。</li>
         </ol>

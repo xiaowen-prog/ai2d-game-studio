@@ -1,0 +1,20 @@
+{
+  "version": "0.1.0-preview.3.2",
+  "platform": "win32",
+  "architecture": "x64",
+  "format": "portable-zip",
+  "bundledCodex": "0.148.0-win32-x64",
+  "privatePathsFound": false,
+  "archiveContentsVerified": true,
+  "applicationLaunched": false,
+  "modelCalls": 0,
+  "windowsAcceptance": "pending-user",
+  "codeSigned": false,
+  "artifacts": [
+    {
+      "name": "Zaojing-0.1.0-preview.3.2-win-x64.zip",
+      "bytes": 331114652,
+      "sha256": "be43f46967dd30404440be369d7bdae1b4ae89951e82462c8b191d850f8c9db3"
+    }
+  ]
+}

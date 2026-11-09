@@ -14,7 +14,6 @@ import {
 } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import {
-  delimiter,
   dirname,
   extname,
   isAbsolute,
@@ -122,8 +121,12 @@ export class GodotEnvironmentService {
     }
     this.#storageFile = resolve(options.storageFile);
     this.#platform = options.platform ?? process.platform;
-    this.#environment = { ...(options.environment ?? process.env) };
-    this.#homeDirectory = resolve(options.homeDirectory ?? this.#environment.HOME ?? homedir());
+    const environment = options.environment ?? process.env;
+    // Spreading process.env loses Windows' case-insensitive Path/AppData lookups.
+    this.#environment = this.#platform === 'win32'
+      ? Object.fromEntries(Object.entries(environment).map(([key, value]) => [key.toUpperCase(), value]))
+      : { ...environment };
+    this.#homeDirectory = resolve(options.homeDirectory ?? this.#environment.HOME ?? this.#environment.USERPROFILE ?? homedir());
     this.#templateRoots = options.templateRoots?.map((root) => resolve(root)) ?? null;
     this.#processRunner = options.processRunner ?? runGodotProcess;
     this.#now = options.now ?? (() => new Date());
@@ -525,7 +528,7 @@ async function automaticCandidates(
   const executableNames = platform === 'win32'
     ? ['godot4.exe', 'godot.exe']
     : ['godot4', 'godot'];
-  for (const directory of (environment.PATH ?? '').split(delimiter).filter(Boolean)) {
+  for (const directory of (environment.PATH ?? '').split(platform === 'win32' ? ';' : ':').map(part => part.replace(/^"|"$/gu, '')).filter(Boolean)) {
     for (const name of executableNames) {
       candidates.push({ path: join(directory, name), source: 'path' });
     }

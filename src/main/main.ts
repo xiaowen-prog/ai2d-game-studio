@@ -151,6 +151,7 @@ const smokeCapture = process.env.NOOBI_SMOKE_CAPTURE?.trim() || null;
 if (smokeCapture) app.setPath('userData', resolve('.noobi-smoke/user-data'));
 
 app.setName('造境');
+if (process.platform === 'win32') app.setAppUserModelId('ai.ai2d.studio');
 
 const runtime = new CodexAppServer({
   codexHome: join(app.getPath('userData'), 'codex-home'),

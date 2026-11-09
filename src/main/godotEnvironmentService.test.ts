@@ -17,6 +17,22 @@ afterEach(async () => {
 });
 
 describe('GodotEnvironmentService', () => {
+  it('handles Windows Path casing, semicolons, spaces and AppData templates', async () => {
+    const root = await temporaryRoot('zaojing-windows-');
+    const binary = await fakeExecutable(root, '工具 空格/godot.exe');
+    const roaming = join(root, 'Roaming Data');
+    const templates = join(roaming, 'Godot/export_templates/4.5.1.stable');
+    await mkdir(templates, { recursive: true });
+    await writeFile(join(templates, 'web_nothreads_release.zip'), 'synthetic template');
+    const service = new GodotEnvironmentService({ storageFile: join(root, 'settings.json'), platform: 'win32',
+      environment: { Path: `${join(root, 'missing')};"${join(root, '工具 空格')}"`, AppData: roaming },
+      homeDirectory: root, processRunner: versionRunner('4.5.1.stable.official') });
+    const status = await service.init();
+    expect(status.tool).toMatchObject({ state: 'ready', source: 'path', binaryPath: await realpath(binary) });
+    expect(await realpath(status.exportTemplates.versionPath!)).toBe(await realpath(templates));
+    expect(status.exportTemplates.targets.web).toBe(true);
+  });
+
   it('finds macOS self-contained templates beside the app bundle', async () => {
     const root = await temporaryRoot('noobi-godot-portable-');
     const binary = await fakeExecutable(root, 'Godot.app/Contents/MacOS/Godot');

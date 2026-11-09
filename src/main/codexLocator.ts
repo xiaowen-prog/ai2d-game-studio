@@ -60,12 +60,13 @@ export async function locateCodexBinary(): Promise<string> {
     candidates.push('/Applications/Codex.app/Contents/Resources/codex');
   }
 
-  const which = spawnSync(process.platform === 'win32' ? 'where' : 'which', ['codex'], {
+  const which = spawnSync(process.platform === 'win32' ? 'where' : 'which', [process.platform === 'win32' ? 'codex.exe' : 'codex'], {
     encoding: 'utf8',
     timeout: 3_000,
+    windowsHide: true,
   });
   if (which.status === 0 && which.stdout.trim()) {
-    candidates.push(which.stdout.trim().split(/\r?\n/u)[0]!);
+    candidates.push(...which.stdout.trim().split(/\r?\n/u));
   }
 
   const failures: string[] = [];
@@ -87,6 +88,7 @@ export function readCodexVersion(binaryPath: string): string | null {
   const result = spawnSync(binaryPath, ['--version'], {
     encoding: 'utf8',
     timeout: 5_000,
+    windowsHide: true,
   });
   return result.status === 0 ? result.stdout.trim() || null : null;
 }

@@ -1,12 +1,10 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { copyFile, lstat, mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, join } from 'node:path';
 import type { CreationArtifact, CreationDelivery, CreationWorkflow } from '../shared/creation.js';
 import { CreationError, assertCreationId, creationId } from './creationWorkflowStore.js';
 import { creationHash, safeCreationFile, type CreationVersionStore } from './creationVersionStore.js';
+import { createVerifiedZip } from './zipArchive.js';
 
-const execute = promisify(execFile);
 const MANIFEST = 'delivery-manifest.json';
 const ARCHIVE = 'game-package.zip';
 const SOURCE_EXTENSIONS = new Set(['.godot', '.gd', '.gdshader', '.tscn', '.tres', '.res', '.uid', '.import', '.cfg', '.png', '.jpg', '.jpeg', '.webp', '.svg', '.ico', '.wav', '.ogg', '.mp3', '.ttf', '.otf', '.woff', '.woff2', '.json', '.csv', '.txt']);
@@ -92,6 +90,7 @@ export async function exportCreationDelivery(workflow: CreationWorkflow, project
     const createdAt = new Date().toISOString();
     const helpers = {
       '打开网页游戏.command': WEB_LAUNCHER,
+      '打开网页游戏.cmd': WINDOWS_WEB_LAUNCHER,
       'serve-game.py': WEB_SERVER,
       '打开说明.md': deliveryReadme(game.artifact, createdAt),
     };
@@ -102,9 +101,7 @@ export async function exportCreationDelivery(workflow: CreationWorkflow, project
     const manifest: DeliveryManifest = { schemaVersion: 1, projectId: workflow.projectId, sourceVersionId: game.artifact.id,
       sourceSnapshotId: game.artifact.snapshotId, createdAt, files, sourceFiles };
     await writeFile(join(temporary, MANIFEST), JSON.stringify(manifest, null, 2), { flag: 'wx' });
-    // macOS system tools, argv only. User-generated names never become shell commands.
-    await execute('/usr/bin/zip', ['-q', '-r', ARCHIVE, 'godot-project', 'web-game', ...Object.keys(helpers), MANIFEST], { cwd: temporary, signal, timeout: 120_000, maxBuffer: 1_000_000 });
-    await execute('/usr/bin/unzip', ['-tqq', ARCHIVE], { cwd: temporary, signal, timeout: 120_000, maxBuffer: 1_000_000 });
+    await createVerifiedZip(temporary, ARCHIVE, { ...files, [MANIFEST]: await creationHash(temporary, MANIFEST) }, signal);
     const delivery: CreationDelivery = { bundleId, sourceVersionId: game.artifact.id, sourceSnapshotId: game.artifact.snapshotId,
       manifestSha256: await creationHash(temporary, MANIFEST), archiveSha256: await creationHash(temporary, ARCHIVE), fileCount: Object.keys(files).length };
     signal.throwIfAborted();
@@ -118,7 +115,7 @@ export async function exportCreationDelivery(workflow: CreationWorkflow, project
     await rm(temporary, { recursive: true, force: true });
     signal.throwIfAborted();
     if (error instanceof CreationError) throw error;
-    throw new CreationError('EXPORT_FAILED', '导出未完成，原游戏与旧导出包仍保留。请检查磁盘空间及本机 zip 工具后重试。');
+    throw new CreationError('EXPORT_FAILED', '导出未完成，原游戏与旧导出包仍保留。请检查磁盘空间及导出目录的写入权限后重试。');
   }
 }
 
@@ -144,7 +141,7 @@ export async function verifyCreationDelivery(projectId: string, projectRoot: str
 }
 
 function deliveryReadme(game: CreationArtifact, date: string): string {
-  return `# ${game.title.replace(/[\r\n]/gu, ' ').slice(0, 120)}\n\n这是你在 AI 2D 游戏制作台最后确认的版本。导出时间：${date}。\n游戏版本：${game.id}；来源快照：${game.snapshotId}。\n\n## 玩网页游戏\n\n在 macOS 双击“打开网页游戏.command”。电脑需要 Python 3；窗口会显示本机网址并打开浏览器。不要直接双击 web-game/index.html。关闭终端窗口或按 Ctrl+C 可停止。\n\n其他电脑安装 Python 3 后，在本文件所在目录运行 python3 serve-game.py，再打开显示的网址。仅本机可访问，不是公网分享链接。\n\n游戏操作和目标：\n\n${game.summary}\n\n## 继续编辑\n\n使用 Godot 4 导入 godot-project/project.godot，等待资源导入后运行项目。工程与网页分别保存，修改工程不会自动改变网页包。导出文件不需要登录制作台或模型账户。\n\n## 保存与转交\n\ngame-package.zip 包含工程、网页、启动脚本和本说明，解压后使用。delivery-manifest.json 记录文件与确认版本的对应关系；它证明文件一致，不代替真实试玩。工作会话、内部检查记录和缓存没有作为交付内容。\n`;
+  return `# ${game.title.replace(/[\r\n]/gu, ' ').slice(0, 120)}\n\n这是你在 AI 2D 游戏制作台最后确认的版本。导出时间：${date}。\n游戏版本：${game.id}；来源快照：${game.snapshotId}。\n\n## 玩网页游戏\n\n在 Windows 先完整解压，再双击“打开网页游戏.cmd”；在 macOS 双击“打开网页游戏.command”。电脑需要 Python 3.8 或以上；窗口会显示本机网址并打开浏览器。不要直接双击 web-game/index.html。关闭终端窗口或按 Ctrl+C 可停止。\n\nWindows 未安装 Python 时，从 https://www.python.org/downloads/windows/ 安装并勾选 Add Python to PATH，再打开脚本。其他电脑安装 Python 3.8 或以上后，在本文件所在目录运行 python3 serve-game.py，再打开显示的网址。仅本机可访问，不是公网分享链接。\n\n游戏操作和目标：\n\n${game.summary}\n\n## 继续编辑\n\n使用 Godot 4 导入 godot-project/project.godot，等待资源导入后运行项目。工程与网页分别保存，修改工程不会自动改变网页包。导出文件不需要登录制作台或模型账户。\n\n## 保存与转交\n\ngame-package.zip 包含工程、网页、启动脚本和本说明，解压后使用。delivery-manifest.json 记录文件与确认版本的对应关系；它证明文件一致，不代替真实试玩。工作会话、内部检查记录和缓存没有作为交付内容。\n`;
 }
 
 const WEB_LAUNCHER = `#!/bin/zsh
@@ -157,6 +154,27 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 exec python3 serve-game.py
 `;
+
+// ASCII commands and CRLF work under Windows' default console encoding.
+const WINDOWS_WEB_LAUNCHER = `@echo off
+setlocal
+pushd "%~dp0" || exit /b 1
+py -3 -c "import sys; assert sys.version_info >= (3, 8)" >nul 2>&1
+if not errorlevel 1 (
+  py -3 serve-game.py
+) else (
+  python -c "import sys; assert sys.version_info >= (3, 8)" >nul 2>&1
+  if errorlevel 1 (
+    echo Python 3.8 or later is required. Install it from https://www.python.org/downloads/windows/
+    pause
+    popd
+    exit /b 1
+  )
+  python serve-game.py
+)
+if errorlevel 1 pause
+popd
+`.replace(/\n/gu, '\r\n');
 
 const WEB_SERVER = `#!/usr/bin/env python3
 """Local-only static server for the exported game. No model calls or file writes."""

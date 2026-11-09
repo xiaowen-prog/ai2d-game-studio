@@ -50,12 +50,14 @@
     "smoke:godot": "tsx scripts/godot-smoke.ts",
     "smoke:ui": "npm run build && cross-env NOOBI_SMOKE_CAPTURE=.noobi-smoke/workbench.png electron .",
     "verify": "npm run typecheck && npm run test && npm run build",
-    "package:mac": "node scripts/packaging/prepare.mjs && npm run build && cross-env ELECTRON_BUILDER_CACHE=.noobi-private/electron-builder-cache electron-builder --mac --arm64 --dir --publish never && node scripts/packaging/distribute.mjs && node scripts/packaging/check.mjs"
+    "package:mac": "node scripts/packaging/prepare.mjs && npm run build && cross-env ELECTRON_BUILDER_CACHE=.noobi-private/electron-builder-cache electron-builder --mac --arm64 --dir --config.electronDist=node_modules/electron/dist --publish never && node scripts/packaging/distribute.mjs && node scripts/packaging/check.mjs",
+    "package:win": "node scripts/packaging/prepare-windows.mjs && npm run build && cross-env ELECTRON_BUILDER_CACHE=.noobi-private/electron-builder-cache electron-builder --win zip --x64 --publish never --config.directories.output=release/windows && node scripts/packaging/check-windows.mjs"
   },
   "dependencies": {
     "@fontsource/press-start-2p": "^5.3.0",
     "@openai/codex": "0.148.0",
     "@vp-tw/cjk-web-fonts-fusion-pixel-font": "^0.0.1",
+    "fflate": "0.8.3",
     "lucide-react": "^0.468.0",
     "parse5": "8.0.1",
     "pngjs": "^7.0.0",
@@ -122,7 +124,39 @@
       "notarize": false
     },
     "artifactName": "AI2D-Game-Studio-${version}-${arch}.${ext}",
-    "electronDist": "node_modules/electron/dist",
-    "npmRebuild": false
+    "npmRebuild": false,
+    "win": {
+      "icon": ".noobi-private/package-cache/studio.ico",
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Zaojing-${version}-win-${arch}.zip",
+      "signExecutable": false,
+      "requestedExecutionLevel": "asInvoker",
+      "extraFiles": [
+        {
+          "from": "build/windows-使用说明.txt",
+          "to": "先看这里.txt"
+        }
+      ],
+      "files": [
+        "dist/**/*",
+        "!dist/**/*.map",
+        "package.json",
+        "node_modules/three/**/*",
+        "node_modules/three-stdlib/**/*",
+        "node_modules/@openai/codex/**/*",
+        "node_modules/@openai/codex-*/**/*",
+        "build/NOTICE.md",
+        "!node_modules/@openai/codex-darwin-*/**/*",
+        "!node_modules/@openai/codex-linux-*/**/*",
+        "!node_modules/@openai/codex-win32-arm64/**/*"
+      ]
+    }
   }
 }
