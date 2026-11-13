@@ -1,0 +1,292 @@
+verify.sh 自检  2026-11-13 11:08:06  产品：AI2D游戏制作平台（/Users/mima1234/Documents/个人项目-复盘/个人项目-aigc/个人项目-game/开发工作区/projects/AI2D游戏制作平台）
+
+================ 1. mock 自动化测试 ================
+
+> noobi-ai@0.1.0-preview.3.2 test
+> vitest run --reporter=json --outputFile=/var/folders/ch/6z48c2b17t9cgjm2ld_yp13h0000gn/T/tmp.ckYYXQgFvS
+
+JSON report written to /var/folders/ch/6z48c2b17t9cgjm2ld_yp13h0000gn/T/tmp.ckYYXQgFvS
+结果：通过（503/503，实际 Noobi.ai Vitest）
+
+================ 2. 真实模型冒烟记录（docs/evidence/<阶段>/冒烟记录.md，须由冒烟脚本写入，格式见通用手册第十节） ================
+有：docs/evidence/阶段3-2/冒烟记录.md，模型 OpenAI / gpt-5.6-sol，1 次真实调用，最近一次 2026-11-13 11:05:45
+结果：有记录（OpenAI / gpt-5.6-sol，1 次，最近 2026-11-13 11:05:45）
+
+================ 3. 密钥排除（扫描整个仓库会进 git 的文件，以及本产品的构建产物） ================
+通过：没有 .env 文件被 git 跟踪。
+通过：会进仓库的文件中未发现密钥样式字符串。
+结果：通过
+
+================ 4. 数据重启恢复（verify.sh 自己起服务、写随机标记、杀进程、再起、读回；钩子 scripts/restart-check.sh 只提供 start/write/read/stop） ================
+通过：起服务（PID 39607）→ 写入随机标记 → 杀掉 → 再起（PID 39638）→ 按 ID a1f0d835-f125-46e6-8dc0-ff9dc235a51a 读回，标记一致。
+结果：通过（进程 39607→39638，随机标记读回一致）
+
+================ 5. 前端类型检查 / Lint / 生产构建 ================
+
+> noobi-ai@0.1.0-preview.3.2 build
+> npm run clean && npm run typecheck && npm run build:renderer && npm run build:main
+
+
+> noobi-ai@0.1.0-preview.3.2 clean
+> node scripts/clean.mjs
+
+
+> noobi-ai@0.1.0-preview.3.2 typecheck
+> tsc --noEmit -p tsconfig.renderer.json && tsc --noEmit -p tsconfig.main.json
+
+
+> noobi-ai@0.1.0-preview.3.2 build:renderer
+> vite build
+
+vite v6.4.3 building for production...
+transforming...
+✓ 1806 modules transformed.
+rendering chunks...
+computing gzip size...
+../../dist/renderer/index.html                                                                                                          0.97 kB │ gzip:   0.53 kB
+../../dist/renderer/assets/zaojing-icon-BFWyjkAC.png                                                                                    3.64 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.Miscellaneous-Symbols-yuYm0FY5.woff2                       5.18 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.Private-Use-Area-C0NATJdP.woff2                            5.23 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.CJK-Unified-Ideographs-Extension-B-002-BMhUtp9i.woff2      6.20 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.Kangxi-Radicals-XF1iTVVq.woff2                             6.29 kB
+../../dist/renderer/assets/press-start-2p-latin-400-normal-KLytu4cr.woff                                                                6.33 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.Hangul-Syllables-003-DV1Q00Mo.woff2                       10.12 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.Hangul-Syllables-011-BkcwDJoH.woff2                       10.18 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.Hangul-Syllables-001-lGm56scb.woff2                       10.62 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.Hangul-Syllables-004-B0ivpbSq.woff2                       10.79 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.Hangul-Syllables-008-DEpre8D1.woff2                       10.89 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.Hangul-Syllables-002-FVelOlVj.woff2                       10.92 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.Hangul-Syllables-006-B-2lYn2g.woff2                       11.22 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.Hangul-Syllables-005-JyjUFDEH.woff2                       11.32 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.Hangul-Syllables-010-CQ04XBC8.woff2                       11.54 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.Hangul-Syllables-007-EPzID_4d.woff2                       11.58 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.Hangul-Syllables-009-D6xd9tui.woff2                       12.13 kB
+../../dist/renderer/assets/press-start-2p-latin-400-normal-_wFEWmAB.woff2                                                              12.51 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.CJK-Unified-Ideographs-Extension-A-002-Clp4nWF1.woff2     17.78 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.CJK-Unified-Ideographs-019-BAi4jFys.woff2                 24.90 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.CJK-Unified-Ideographs-001-BSj9e39_.woff2                 26.21 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.CJK-Unified-Ideographs-003-DcBH40Bf.woff2                 27.79 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.CJK-Unified-Ideographs-002-8u_gP_7z.woff2                 27.97 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.CJK-Unified-Ideographs-005-CPTBO_8I.woff2                 28.11 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.CJK-Unified-Ideographs-013-CC2ab-9F.woff2                 29.06 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.CJK-Unified-Ideographs-004-DYF0gDiB.woff2                 29.16 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.CJK-Unified-Ideographs-006-CLBNU1G3.woff2                 29.29 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.CJK-Unified-Ideographs-007-XCxA5b9V.woff2                 29.46 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.CJK-Unified-Ideographs-009-CXlHdq0G.woff2                 29.63 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.CJK-Unified-Ideographs-016-Dx-xWapx.woff2                 29.89 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.CJK-Unified-Ideographs-011-DoOfPBOp.woff2                 29.95 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.CJK-Unified-Ideographs-017-N-EzRr-D.woff2                 30.02 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.CJK-Unified-Ideographs-008-Dujz2d77.woff2                 30.09 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.CJK-Unified-Ideographs-010-ByFm6nmp.woff2                 30.18 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.CJK-Unified-Ideographs-014-B10JyqpJ.woff2                 30.52 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.CJK-Unified-Ideographs-012-CHZ7Ghiw.woff2                 30.52 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.CJK-Unified-Ideographs-015-BNCWXPPv.woff2                 30.83 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.CJK-Unified-Ideographs-018-CpOIFAq2.woff2                 31.76 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.CJK-Unified-Ideographs-Extension-A-001-lu6TFzpA.woff2     33.16 kB
+../../dist/renderer/assets/Fusion-Pixel-12px-Proportional-Simplified-Chinese.CJK-Unified-Ideographs-Extension-B-001-Cl2rbeKp.woff2     36.29 kB
+../../dist/renderer/assets/sprite-sleep-b-mCWlgvVJ.png                                                                                 44.81 kB
+../../dist/renderer/assets/sprite-sleep-a-C__v5plI.png                                                                                 45.06 kB
+../../dist/renderer/assets/sprite-stretch-b-DvZtMPPw.png                                                                               47.62 kB
+../../dist/renderer/assets/sprite-sleep-b-DJ4JWJ-T.png                                                                                 49.63 kB
+../../dist/renderer/assets/sprite-sleep-b-DmyhyBrs.png                                                                                 49.74 kB
+../../dist/renderer/assets/sprite-sleep-a-Dw5ohlSQ.png                                                                                 49.87 kB
+../../dist/renderer/assets/sprite-sleep-a-B_SbN2aE.png                                                                                 50.90 kB
+../../dist/renderer/assets/sprite-sleep-b-C2DoPdb0.png                                                                                 51.61 kB
+../../dist/renderer/assets/sprite-play-a-CY51nFYV.png                                                                                  52.83 kB
+../../dist/renderer/assets/sprite-play-b-CrcAOMP_.png                                                                                  53.39 kB
+../../dist/renderer/assets/sprite-idle-a-BfgMzgvI.png                                                                                  53.77 kB
+../../dist/renderer/assets/sprite-sleep-a-BLh7bRI3.png                                                                                 54.06 kB
+../../dist/renderer/assets/sprite-walk-b-a-BH6fP8pN.png                                                                                54.34 kB
+../../dist/renderer/assets/sprite-sleep-a-B-hYfLcc.png                                                                                 54.37 kB
+../../dist/renderer/assets/sprite-idle-b-Byy7GwGS.png                                                                                  54.40 kB
+../../dist/renderer/assets/sprite-walk-b-b-DXXQVLuG.png                                                                                54.96 kB
+../../dist/renderer/assets/sprite-walk-a-a-CNwVsxaf.png                                                                                55.30 kB
+../../dist/renderer/assets/sprite-celebrate-a-CSlz8MV1.png                                                                             55.53 kB
+../../dist/renderer/assets/sprite-sleep-b-COmPJ8zN.png                                                                                 56.08 kB
+../../dist/renderer/assets/sprite-play-b-CjiI-2bd.png                                                                                  56.25 kB
+../../dist/renderer/assets/sprite-walk-b-b-BXorfKf6.png                                                                                56.31 kB
+../../dist/renderer/assets/sprite-celebrate-b-_0hJLVml.png                                                                             56.33 kB
+../../dist/renderer/assets/sprite-idle-b-BXByF98_.png                                                                                  56.42 kB
+../../dist/renderer/assets/sprite-celebrate-b-BJFxKoLR.png                                                                             56.68 kB
+../../dist/renderer/assets/sprite-walk-a-b-8hFQlXEw.png                                                                                57.92 kB
+../../dist/renderer/assets/sprite-coffee-b-CRTXjQPx.png                                                                                57.94 kB
+../../dist/renderer/assets/sprite-walk-a-b-DSVEPQyG.png                                                                                58.31 kB
+../../dist/renderer/assets/sprite-stretch-a-CNhnIeY1.png                                                                               58.43 kB
+../../dist/renderer/assets/sprite-inspect-a-DJpGq62Y.png                                                                               58.74 kB
+../../dist/renderer/assets/sprite-play-a-B0V5PP6b.png                                                                                  58.77 kB
+../../dist/renderer/assets/sprite-coffee-a-BEsMW82u.png                                                                                58.84 kB
+../../dist/renderer/assets/sprite-sweep-b-O30Q9lFi.png                                                                                 59.04 kB
+../../dist/renderer/assets/sprite-idle-a-DmOwEbeB.png                                                                                  59.17 kB
+../../dist/renderer/assets/sprite-celebrate-a-C_AWDRQB.png                                                                             59.40 kB
+../../dist/renderer/assets/sprite-inspect-b-B_l3lPqc.png                                                                               59.67 kB
+../../dist/renderer/assets/sprite-walk-b-a-CbmiWD6U.png                                                                                59.79 kB
+../../dist/renderer/assets/sprite-walk-a-a-DxT_eb4C.png                                                                                59.91 kB
+../../dist/renderer/assets/sprite-walk-a-b-C-bYHxvm.png                                                                                60.62 kB
+../../dist/renderer/assets/sprite-walk-b-a-BzqJu0e0.png                                                                                60.67 kB
+../../dist/renderer/assets/sprite-idle-b-D7o8nRIw.png                                                                                  61.06 kB
+../../dist/renderer/assets/sprite-coffee-b-DDnw3UK8.png                                                                                61.08 kB
+../../dist/renderer/assets/sprite-repair-a-CXgc2Ikw.png                                                                                61.12 kB
+../../dist/renderer/assets/sprite-work-b-B2QyApFH.png                                                                                  61.14 kB
+../../dist/renderer/assets/sprite-celebrate-b-D_2CNV6_.png                                                                             61.16 kB
+../../dist/renderer/assets/sprite-stretch-a-B5KsoyW4.png                                                                               61.32 kB
+../../dist/renderer/assets/sprite-repair-b-Br0p4bw5.png                                                                                61.45 kB
+../../dist/renderer/assets/sprite-sweep-a-s7mynOsR.png                                                                                 61.66 kB
+../../dist/renderer/assets/sprite-paint-b-DrORh13b.png                                                                                 61.77 kB
+../../dist/renderer/assets/sprite-sweep-b-DMZPuEUY.png                                                                                 61.94 kB
+../../dist/renderer/assets/sprite-type-b-Bd4Xgo4z.png                                                                                  61.97 kB
+../../dist/renderer/assets/sprite-carry-b-B-Ab1DAE.png                                                                                 62.13 kB
+../../dist/renderer/assets/sprite-type-a-Cz0WCv-9.png                                                                                  62.17 kB
+../../dist/renderer/assets/sprite-repair-b-oF1qMO_V.png                                                                                62.35 kB
+../../dist/renderer/assets/sprite-coffee-b-BWghR1zb.png                                                                                62.37 kB
+../../dist/renderer/assets/sprite-type-a-D6ad96Nm.png                                                                                  62.50 kB
+../../dist/renderer/assets/sprite-work-b-DuEY975O.png                                                                                  62.52 kB
+../../dist/renderer/assets/sprite-sweep-a-DqC6SWTr.png                                                                                 62.58 kB
+../../dist/renderer/assets/sprite-type-a-Beh7MTOj.png                                                                                  62.62 kB
+../../dist/renderer/assets/sprite-walk-a-a-Cyi-qal1.png                                                                                62.65 kB
+../../dist/renderer/assets/sprite-idle-a-BSw0BFsg.png                                                                                  62.75 kB
+../../dist/renderer/assets/sprite-inspect-a-q_AyXxr6.png                                                                               62.83 kB
+../../dist/renderer/assets/sprite-work-a-DNluEpRs.png                                                                                  62.99 kB
+../../dist/renderer/assets/sprite-carry-a-BUmqcMaG.png                                                                                 63.00 kB
+../../dist/renderer/assets/sprite-coffee-a-DRUJQ0rx.png                                                                                63.10 kB
+../../dist/renderer/assets/sprite-carry-b-2HezscpX.png                                                                                 63.18 kB
+../../dist/renderer/assets/sprite-inspect-b-BxFM5XC3.png                                                                               63.20 kB
+../../dist/renderer/assets/sprite-walk-b-b-BwXuoaVN.png                                                                                63.22 kB
+../../dist/renderer/assets/sprite-carry-b-C2O0Va8F.png                                                                                 63.34 kB
+../../dist/renderer/assets/sprite-play-b-LdefV7vw.png                                                                                  63.79 kB
+../../dist/renderer/assets/sprite-type-b-GK9VeOUE.png                                                                                  63.82 kB
+../../dist/renderer/assets/sprite-coffee-a-Fo9uPF3D.png                                                                                63.87 kB
+../../dist/renderer/assets/sprite-type-b-C4Oka5d6.png                                                                                  63.91 kB
+../../dist/renderer/assets/sprite-inspect-b-B82BjwKE.png                                                                               63.94 kB
+../../dist/renderer/assets/sprite-stretch-a-Bj1eaT66.png                                                                               64.26 kB
+../../dist/renderer/assets/sprite-type-b-C4SgPBIH.png                                                                                  64.28 kB
+../../dist/renderer/assets/sprite-work-a-BqO_a2HD.png                                                                                  64.39 kB
+../../dist/renderer/assets/sprite-paint-a-ko0ejxsW.png                                                                                 64.48 kB
+../../dist/renderer/assets/sprite-carry-a-CTkbkLzK.png                                                                                 64.63 kB
+../../dist/renderer/assets/sprite-repair-a-BudRSbR2.png                                                                                64.76 kB
+../../dist/renderer/assets/sprite-type-a-CbBm6-HA.png                                                                                  64.77 kB
+../../dist/renderer/assets/sprite-inspect-b-DHZaZROn.png                                                                               64.86 kB
+../../dist/renderer/assets/sprite-stretch-b-BvvucXGD.png                                                                               64.95 kB
+../../dist/renderer/assets/sprite-play-a-DAyyNCZP.png                                                                                  65.15 kB
+../../dist/renderer/assets/sprite-coffee-a-DO3iSOmn.png                                                                                65.28 kB
+../../dist/renderer/assets/sprite-carry-a-BtckzSuw.png                                                                                 65.40 kB
+../../dist/renderer/assets/sprite-coffee-b-SenHt7vf.png                                                                                65.42 kB
+../../dist/renderer/assets/sprite-inspect-a-f5c-rou9.png                                                                               65.52 kB
+../../dist/renderer/assets/sprite-sweep-b-Bpc3SrxY.png                                                                                 65.75 kB
+../../dist/renderer/assets/sprite-celebrate-a-CHwbOqFu.png                                                                             66.02 kB
+../../dist/renderer/assets/sprite-inspect-a-DOJCnHlt.png                                                                               66.15 kB
+../../dist/renderer/assets/sprite-sweep-a-yNxAXL9U.png                                                                                 66.31 kB
+../../dist/renderer/assets/sprite-repair-b-C-3_X_Xv.png                                                                                66.44 kB
+../../dist/renderer/assets/sprite-stretch-b-CIwB0jKI.png                                                                               66.84 kB
+../../dist/renderer/assets/sprite-work-a-B7d7XnZl.png                                                                                  66.87 kB
+../../dist/renderer/assets/sprite-work-b-5COymcMK.png                                                                                  67.32 kB
+../../dist/renderer/assets/sprite-repair-a-BhNs8PmC.png                                                                                67.32 kB
+../../dist/renderer/assets/sprite-paint-a-DjCC6t1H.png                                                                                 67.52 kB
+../../dist/renderer/assets/sprite-paint-b-DGb5pB1k.png                                                                                 67.76 kB
+../../dist/renderer/assets/sprite-walk-b-a-BPJrhG7l.png                                                                                68.16 kB
+../../dist/renderer/assets/sprite-play-b-gF3UZNjM.png                                                                                  68.20 kB
+../../dist/renderer/assets/sprite-paint-b-qIBjS_lL.png                                                                                 68.27 kB
+../../dist/renderer/assets/sprite-walk-a-b-WZIef91v.png                                                                                68.29 kB
+../../dist/renderer/assets/sprite-carry-b-B1csSAV3.png                                                                                 68.54 kB
+../../dist/renderer/assets/sprite-work-b-C6K28Nod.png                                                                                  68.93 kB
+../../dist/renderer/assets/sprite-play-a-DEhFzOkn.png                                                                                  69.00 kB
+../../dist/renderer/assets/sprite-walk-b-b-C4BZsyxp.png                                                                                69.35 kB
+../../dist/renderer/assets/sprite-work-a-Ds4ps-mv.png                                                                                  69.42 kB
+../../dist/renderer/assets/sprite-carry-a-C0Lw0kDw.png                                                                                 69.44 kB
+../../dist/renderer/assets/sprite-paint-a-BfCc3AXH.png                                                                                 69.60 kB
+../../dist/renderer/assets/sprite-idle-b-DGeic-7V.png                                                                                  69.83 kB
+../../dist/renderer/assets/sprite-inspect-b-DDVrF41L.png                                                                               69.96 kB
+../../dist/renderer/assets/sprite-walk-a-a-CLwR9sC5.png                                                                                70.53 kB
+../../dist/renderer/assets/sprite-walk-a-b-g-fQy0gk.png                                                                                70.61 kB
+../../dist/renderer/assets/sprite-inspect-a-Bt20Utig.png                                                                               71.25 kB
+../../dist/renderer/assets/sprite-walk-b-b-gyKZLTON.png                                                                                71.70 kB
+../../dist/renderer/assets/sprite-walk-b-a-DAygExoc.png                                                                                71.72 kB
+../../dist/renderer/assets/sprite-idle-a-DDc1RE7E.png                                                                                  71.75 kB
+../../dist/renderer/assets/sprite-sweep-b-CG-ngXwr.png                                                                                 71.94 kB
+../../dist/renderer/assets/sprite-sweep-a-DS540za7.png                                                                                 72.09 kB
+../../dist/renderer/assets/sprite-play-a-B3MrZ7W0.png                                                                                  72.11 kB
+../../dist/renderer/assets/sprite-play-b-Dq22gxVU.png                                                                                  72.31 kB
+../../dist/renderer/assets/sprite-celebrate-b-DRD4eHdF.png                                                                             72.33 kB
+../../dist/renderer/assets/sprite-coffee-b-Br_YsyAM.png                                                                                72.98 kB
+../../dist/renderer/assets/sprite-sweep-b-BxzLuskS.png                                                                                 73.08 kB
+../../dist/renderer/assets/sprite-repair-b-DVgl-eLd.png                                                                                73.28 kB
+../../dist/renderer/assets/sprite-idle-b-lYTZyDbi.png                                                                                  73.31 kB
+../../dist/renderer/assets/sprite-paint-b-pWjAwPtd.png                                                                                 73.49 kB
+../../dist/renderer/assets/sprite-type-a-COT0KkZb.png                                                                                  73.53 kB
+../../dist/renderer/assets/sprite-paint-a-CrAzOTzV.png                                                                                 73.59 kB
+../../dist/renderer/assets/sprite-work-a-ComLj0gc.png                                                                                  73.72 kB
+../../dist/renderer/assets/sprite-repair-a-DxQVdERw.png                                                                                73.99 kB
+../../dist/renderer/assets/sprite-coffee-a-BL0kNi4W.png                                                                                74.08 kB
+../../dist/renderer/assets/sprite-work-b-skaTEuhZ.png                                                                                  74.37 kB
+../../dist/renderer/assets/sprite-sweep-a-DUEb0id_.png                                                                                 74.45 kB
+../../dist/renderer/assets/sprite-walk-a-a-C_uil0aI.png                                                                                74.60 kB
+../../dist/renderer/assets/sprite-carry-b-MQFmpbFs.png                                                                                 74.65 kB
+../../dist/renderer/assets/sprite-stretch-a-DGQH2qT6.png                                                                               74.68 kB
+../../dist/renderer/assets/sprite-idle-a-BOju9kVj.png                                                                                  74.87 kB
+../../dist/renderer/assets/sprite-carry-a-BgEFPcD7.png                                                                                 75.24 kB
+../../dist/renderer/assets/sprite-celebrate-a-tUrRG75d.png                                                                             75.80 kB
+../../dist/renderer/assets/sprite-stretch-b-CH61o4zp.png                                                                               75.92 kB
+../../dist/renderer/assets/sprite-type-b-BHNkEQdw.png                                                                                  76.10 kB
+../../dist/renderer/assets/sprite-celebrate-b-Bs56TiI0.png                                                                             77.28 kB
+../../dist/renderer/assets/sprite-repair-a-CRBiPc90.png                                                                                77.62 kB
+../../dist/renderer/assets/sprite-celebrate-a-CV_LkqEN.png                                                                             78.70 kB
+../../dist/renderer/assets/sprite-repair-b-eixE30wF.png                                                                                78.79 kB
+../../dist/renderer/assets/sprite-paint-a-CvGx6Qel.png                                                                                 80.07 kB
+../../dist/renderer/assets/sprite-stretch-a-DYISEEUP.png                                                                               80.62 kB
+../../dist/renderer/assets/sprite-paint-b-B4-2TNrK.png                                                                                 80.82 kB
+../../dist/renderer/assets/sprite-stretch-b-Dmoi7YrW.png                                                                               82.01 kB
+../../dist/renderer/assets/noobi-sky-dock-BKhxSv7o.gif                                                                                437.41 kB
+../../dist/renderer/assets/noobi-crystal-lab-iT04RsPu.gif                                                                             485.40 kB
+../../dist/renderer/assets/noobi-cozy-workshop-D629uy8r.gif                                                                           499.58 kB
+../../dist/renderer/assets/character-a-CXSbguXP.png                                                                                   518.64 kB
+../../dist/renderer/assets/noobi-star-observatory-CLEi-MSI.gif                                                                        522.71 kB
+../../dist/renderer/assets/noobi-snow-cabin-DxZ3ifDI.gif                                                                              523.27 kB
+../../dist/renderer/assets/noobi-rooftop-studio-Pw8KyV2v.gif                                                                          534.69 kB
+../../dist/renderer/assets/noobi-seaside-arcade-BaVssO8u.gif                                                                          539.52 kB
+../../dist/renderer/assets/noobi-forest-camp-CNmblGH5.gif                                                                             573.38 kB
+../../dist/renderer/assets/noobi-potion-garden-DCLitTDM.gif                                                                           630.41 kB
+../../dist/renderer/assets/four-ip-fishing-BH3Zj76b.gif                                                                               799.90 kB
+../../dist/renderer/assets/forest-runner-C2SnYdAA.png                                                                                 926.08 kB
+../../dist/renderer/assets/noobi-snow-mountain-hero-BtwVPTO9.png                                                                    1,484.39 kB
+../../dist/renderer/assets/forest-level-CF3nSz-c.png                                                                                1,736.39 kB
+../../dist/renderer/assets/scene-DWSonCn1.png                                                                                       2,489.35 kB
+../../dist/renderer/assets/scene-Ci5ndBOb.png                                                                                       2,505.43 kB
+../../dist/renderer/assets/scene-L0Xa4dS_.png                                                                                       2,728.10 kB
+../../dist/renderer/assets/scene-B1urpRZa.png                                                                                       2,774.72 kB
+../../dist/renderer/assets/scene-CKnE5DDz.png                                                                                       2,788.92 kB
+../../dist/renderer/assets/scene-DRGjHZjW.png                                                                                       3,217.77 kB
+../../dist/renderer/assets/scene-BeVzm8p1.png                                                                                       3,473.74 kB
+../../dist/renderer/assets/index-CKMYAWip.css                                                                                         420.71 kB │ gzip: 141.53 kB
+../../dist/renderer/assets/index-CWLGW-wU.js                                                                                          505.95 kB │ gzip: 154.19 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 895ms
+
+> noobi-ai@0.1.0-preview.3.2 build:main
+> tsc -p tsconfig.main.json
+
+通过：实际 Noobi.ai 已跟踪/未忽略文件、构建产物与本机 .env 值排除检查。
+结果：通过（实际 Noobi.ai TypeScript 与生产构建）
+
+================ 6. 文件齐全与位置（AGENTS.md 第 7 节的产出清单；根目录不放产品文件；前面阶段有没有被跳过） ================
+通过：根目录没有放错位置的文件。
+有：docs/阶段文档/前端适配声明.md
+有：docs/阶段文档/阶段3-2技术开发文档.md
+有：docs/项目状态.md
+有：README.md
+有：docs/evidence/阶段3-2/照着做清单.md
+有：docs/evidence/阶段3-2/是否表.md
+有：docs/evidence/阶段3-2/ 下 1 张截图
+通过：前面阶段（阶段0 阶段1 阶段2-1 阶段3-0 阶段3-1）的产物都在。
+结果：通过
+
+================ 汇总（抄进是否表的就是这六行） ================
+是否表第 2 项  mock 测试：      通过（503/503，实际 Noobi.ai Vitest）
+是否表第 3 项  真实模型冒烟：   有记录（OpenAI / gpt-5.6-sol，1 次，最近 2026-11-13 11:05:45）
+是否表第 4 项  前端检查与构建： 通过（实际 Noobi.ai TypeScript 与生产构建）
+是否表第 5 项  密钥排除：       通过
+是否表第 6 项  重启后数据恢复： 通过（进程 39607→39638，随机标记读回一致）
+是否表第 10 项 文件齐全与位置： 通过
+总判定：六项全部通过或不适用。

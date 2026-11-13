@@ -38,7 +38,7 @@ describe('2-3 action state boundaries',()=>{
  it('edits actions, requires reconfirmation and restores exact approved actions with no new call',async()=>{
   await act({action:'animate'});const saved=await act({action:'confirm'});const checkpoint=saved.history.find(h=>h.label==='已确认人物动作')!;
   const edited=await act({action:'revise',stage:'character',impactAccepted:true,prompt:'走路慢一点'});expect(edited.steps.character.confirmedVersionId).toBeNull();expect(generate.mock.calls[1][0].task?.characterPhase).toBe('actions');
-  const restored=await act({action:'restore',checkpointId:checkpoint.id});expect(restored.steps.character).toEqual(saved.steps.character);expect(generate).toHaveBeenCalledTimes(2);
+  const restored=await act({action:'restore',impactAccepted:true,checkpointId:checkpoint.id});expect(restored.steps.character).toEqual(saved.steps.character);expect(generate).toHaveBeenCalledTimes(2);
  });
  it('returning to appearance invalidates actions without generation and preserves history',async()=>{
   await act({action:'animate'});await expect(act({action:'edit-character'})).rejects.toMatchObject({code:'IMPACT_CONFIRMATION_REQUIRED'});
