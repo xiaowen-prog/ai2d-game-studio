@@ -1,6 +1,6 @@
-# Contributing to Noobi.ai
+# 为造境贡献
 
-Thanks for helping make Noobi.ai safer, more portable and easier to extend. Focused pull requests are the easiest to review and merge.
+感谢你帮助造境变得更安全、更易移植、更容易扩展。聚焦单一问题的 Pull Request 最容易审查和合并。
 
 ## Good places to contribute
 
@@ -18,13 +18,13 @@ For larger features or behavior changes, open a proposal issue before investing 
 You need macOS, Node.js 22 LTS, npm, and a ChatGPT/Codex account for real Agent smoke tests.
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/Noobi.ai.git
-cd Noobi.ai
+git clone https://github.com/xiaowen-prog/ai2d-game-studio.git
+cd ai2d-game-studio
 npm ci
 npm run dev
 ```
 
-Keep your fork current without rewriting shared history:
+如果需要同步上游，请保留共享历史，不要改写已有提交：
 
 ```bash
 git remote add upstream https://github.com/Innate-Labs/Noobi.ai.git

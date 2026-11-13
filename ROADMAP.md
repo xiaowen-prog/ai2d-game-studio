@@ -1,38 +1,25 @@
-# Noobi.ai roadmap
+# 造境路线图
 
-Noobi.ai is a macOS developer preview. This roadmap describes useful directions, not delivery promises. If you want to work on a larger item, open a proposal issue first so the implementation can be scoped with the maintainers.
+路线图只记录已授权方向，不代表已经交付。
 
-## Reliability and release readiness
+## 制作体验
 
-- [ ] Publish the project's open-source license after owner approval
-- [ ] Add signed and notarized Apple Silicon and Intel macOS builds
-- [ ] Create reproducible release notes and checksums
-- [ ] Expand failure diagnostics for Codex login, model access and media-provider capability checks
-- [ ] Add end-to-end coverage for interrupted and resumed production runs
+- [x] 方向、角色、动作、场景、试玩和交付的分阶段流程
+- [x] 历史版本、确认记录和恢复
+- [x] macOS / Windows x64 测试包
+- [x] 私有在线界面连接本机真实制作台
+- [ ] 在线制作台的多人协作与跨设备项目同步
+- [ ] 更完整的试玩对比和审查报告
 
-## Platform support
+## 平台与交付
 
-- [ ] Validate development on Windows and Linux
-- [ ] Add Windows and Linux packaging workflows
-- [ ] Document platform-specific secret storage and sandbox behavior
-- [ ] Test game-project paths containing non-ASCII characters and network volumes
+- [ ] Apple Developer 签名、公证和正式发布
+- [ ] 更稳定的跨平台安装包
+- [ ] 真实游戏样例画廊与可复现提示词
+- [ ] 更完整的无障碍与键盘导航
 
-## Game and media ecosystem
+## 维护原则
 
-- [ ] Stabilize a documented media-provider adapter contract
-- [ ] Add example adapters with mocked integration tests
-- [ ] Add more deterministic 2D, 2.5D and Three.js project templates
-- [ ] Publish a small gallery of generated games with reproducible prompts
-- [ ] Add native asynchronous-job orchestration for selected 3D providers
-
-## Workbench experience
-
-- [ ] Improve keyboard navigation and screen-reader coverage
-- [ ] Add a run comparison and review-diff view
-- [ ] Add exportable production reports
-- [ ] Extend English and Simplified Chinese localization coverage
-- [ ] Add first-run guidance without hiding the underlying project and security model
-
-## Contribution-ready ideas
-
-The best first contributions are narrow and verifiable: a provider fixture, a platform-path test, a documentation fix, an accessibility improvement, or a focused game-template enhancement. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+- 保留本机数据、历史版本和原有测试证据。
+- 真实模型调用、试玩和产品验收不由工程构建结果替代。
+- 上游代码与第三方依赖按各自的许可证和署名边界处理。
