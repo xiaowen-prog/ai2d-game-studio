@@ -10,7 +10,11 @@ import { installBrowserBridge } from './browserBridge';
 import './styles.css';
 import './studio.css';
 
-const design = new URLSearchParams(location.search).get('design');
+const requestedDesign = new URLSearchParams(location.search).get('design');
+const isHostedPreview =
+  (location.protocol === 'http:' || location.protocol === 'https:') &&
+  !['127.0.0.1', 'localhost'].includes(location.hostname);
+const design = requestedDesign ?? (isHostedPreview ? 'refined' : null);
 if (design === null) installBrowserBridge();
 
 createRoot(document.getElementById('root')!).render(
