@@ -32,6 +32,7 @@
   "scripts": {
     "clean": "node scripts/clean.mjs",
     "dev": "concurrently -k \"vite --host 127.0.0.1 --port 5174\" \"tsc -p tsconfig.main.json --watch --preserveWatchOutput\" \"wait-on tcp:5174 file:dist/main/main.js file:dist/main/preload.cjs && cross-env NOOBI_RENDERER_URL=http://127.0.0.1:5174 electron .\"",
+    "online:bridge": "npm run build && cross-env NOOBI_BROWSER_STUDIO=1 NOOBI_BROWSER_OPEN=0 electron .",
     "typecheck": "tsc --noEmit -p tsconfig.renderer.json && tsc --noEmit -p tsconfig.main.json",
     "build:renderer": "vite build",
     "build:main": "tsc -p tsconfig.main.json",

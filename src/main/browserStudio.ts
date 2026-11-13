@@ -17,6 +17,13 @@ export async function startBrowserStudio(
   operations: ReadonlyMap<string, Operation>,
   delivery: (projectId: string, versionId: string) => Promise<string>,
 ) {
+  const allowedOrigins = new Set(
+    (process.env.NOOBI_BROWSER_ALLOWED_ORIGINS
+      ?? 'https://zaojing-game-studio-preview.dear-vale-4884.chatgpt.site')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
   const clients = new Set<ServerResponse>();
   const server = createServer(async (request, response) => {
     response.setHeader('X-Content-Type-Options', 'nosniff');
@@ -27,10 +34,28 @@ export async function startBrowserStudio(
         response.writeHead(403).end();
         return;
       }
+      const requestOrigin = request.headers.origin;
+      const crossOrigin = typeof requestOrigin === 'string' && requestOrigin !== origin;
+      const trustedCrossOrigin = crossOrigin && allowedOrigins.has(requestOrigin);
+      if (crossOrigin && !trustedCrossOrigin) {
+        response.writeHead(403).end();
+        return;
+      }
+      if (trustedCrossOrigin) {
+        response.setHeader('Access-Control-Allow-Origin', requestOrigin);
+        response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        response.setHeader('Access-Control-Allow-Private-Network', 'true');
+        response.setHeader('Vary', 'Origin');
+      }
       const url = new URL(request.url ?? '/', origin);
       const path = url.pathname;
       if (path.startsWith('/studio/')) {
-        if (request.headers['sec-fetch-site'] !== 'same-origin') {
+        if (request.method === 'OPTIONS' && trustedCrossOrigin) {
+          response.writeHead(204).end();
+          return;
+        }
+        if (!trustedCrossOrigin && request.headers['sec-fetch-site'] !== 'same-origin') {
           response.writeHead(403).end();
           return;
         }
@@ -53,7 +78,7 @@ export async function startBrowserStudio(
           return;
         }
         const operation = operations.get(path.slice('/studio/'.length));
-        if (request.method !== 'POST' || !operation || request.headers.origin !== origin ||
+        if (request.method !== 'POST' || !operation || (!trustedCrossOrigin && request.headers.origin !== origin) ||
           request.headers['content-type'] !== 'application/json') {
           response.writeHead(403).end();
           return;
@@ -93,7 +118,8 @@ export async function startBrowserStudio(
   });
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
-    server.listen(0, '127.0.0.1', resolve);
+    const configuredPort = Number(process.env.NOOBI_BROWSER_PORT ?? '47621');
+    server.listen(Number.isInteger(configuredPort) && configuredPort > 0 ? configuredPort : 47621, '127.0.0.1', resolve);
   });
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('无法启动本机浏览器入口。');

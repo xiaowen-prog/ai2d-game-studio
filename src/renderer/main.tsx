@@ -11,14 +11,15 @@ import './styles.css';
 import './studio.css';
 
 const requestedDesign = new URLSearchParams(location.search).get('design');
+const liveMode = new URLSearchParams(location.search).get('live') === '1';
 const isHostedPreview =
   (location.protocol === 'http:' || location.protocol === 'https:') &&
   !['127.0.0.1', 'localhost'].includes(location.hostname);
 const design = requestedDesign ?? (isHostedPreview ? 'refined' : null);
-if (design === null) installBrowserBridge();
+if (liveMode || design === null) installBrowserBridge();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {design === null ? <App /> : design === 'refined' ? <StudioPreview /> : <DesignPreview initial={design} />}
+    {liveMode || design === null ? <App /> : design === 'refined' ? <StudioPreview /> : <DesignPreview initial={design} />}
   </StrictMode>,
 );

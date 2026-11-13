@@ -32,6 +32,8 @@
 .zp-nav a[aria-current=page]:focus-visible::before { display:none; }
 .zp-nav a[aria-current=page]::after { content:""; position:absolute; bottom:0; left:0; right:0; height:3px; background:var(--zp-red); }
 .zp-header-end { margin-left:auto; display:flex; gap:22px; align-items:center; }
+.zp-live-link { display:flex; align-items:center; gap:6px; min-height:34px; padding:0 12px; border:1px solid #d8e0d8; color:#eef4e9; font-size:13px; }
+.zp-live-link:hover { background:#ffffff12; border-color:#f0f5e9; }
 .zp-preview-badge { display:flex; align-items:center; gap:7px; color:#c7cdce!important; font-size:14px!important; }
 .zp-home-hero { display:grid; grid-template-columns:1.04fr 1fr; gap:7%; padding:62px 6% 58px; max-width:1680px; margin:auto; align-items:center; }
 .zp-hero-copy { min-width:0; }
@@ -262,6 +264,7 @@
 }
 @media (max-width:760px) {
   .zp-header,.zp-view-studio .zp-header { height:52px; padding-inline:14px; gap:16px; }.zp-brand { gap:7px; }.zp-brand strong { font-size:21px; }.zp-brand .zp-mark { width:24px; height:24px; }.zp-nav { gap:16px; }.zp-nav a { font-size:13px; }.zp-header-end { margin-left:auto; }.zp-preview-badge { font-size:12px!important; gap:5px; }.zp-preview-label { display:inline; }.zp-preview-badge>svg { display:none; }
+  .zp-live-link { padding-inline:9px; }.zp-live-link span { display:none; }
   .zp-home-hero { grid-template-columns:1fr; padding:30px 22px; gap:28px; }.zp-hero-copy h1 { font-size:clamp(30px,6.2vw,47px); white-space:normal; overflow-wrap:anywhere; }.zp-hero-description { margin:18px 0 22px!important; font-size:16px; }.zp-art-window { height:310px; }.zp-art-caption { left:22px; right:22px; bottom:82px; }.zp-art-caption h2 { font-size:34px; }.zp-art-open { left:18px; right:18px; bottom:20px; min-width:0; height:auto; min-height:44px; justify-content:space-between; padding:10px 16px; font-size:14px; white-space:normal; }
   .zp-idea textarea { font-size:16px; }.zp-genre-toggle { min-width:0; flex-wrap:wrap; }.zp-idea-bottom>.zp-primary { min-width:0; flex:none; }
   .zp-section-heading { min-width:0; gap:12px; }.zp-projects-link { flex:none; }

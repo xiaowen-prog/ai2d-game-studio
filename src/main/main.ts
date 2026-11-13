@@ -191,8 +191,18 @@ const browserMode = process.env.NOOBI_BROWSER_STUDIO === '1';
 const browserOperations = new Map<string, (...args: any[]) => unknown>();
 const browserChannels = new Set([
   'noobi:bootstrap', 'noobi:creation:get', 'noobi:creation:act', 'noobi:creation:preview',
-  'noobi:runtime:refresh', 'noobi:runtime:login', 'noobi:environment:get', 'noobi:environment:refresh',
-  'noobi:approval:resolve', 'noobi:project:rename', 'noobi:project:pin',
+  'noobi:runtime:refresh', 'noobi:runtime:login', 'noobi:runtime:logout',
+  'noobi:dialog:directory', 'noobi:dialog:project-directory', 'noobi:project:create',
+  'noobi:project:rename', 'noobi:project:pin', 'noobi:project:delete', 'noobi:project:run',
+  'noobi:project:stop', 'noobi:project:reveal', 'noobi:project:assets:import',
+  'noobi:project:asset-plan:retry', 'noobi:project:inspect', 'noobi:project:experience:evaluate',
+  'noobi:project:experience:cancel', 'noobi:project:read', 'noobi:project:icon',
+  'noobi:project:noobi-pack:save', 'noobi:project:noobi-crew:save', 'noobi:settings:save',
+  'noobi:environment:get', 'noobi:environment:refresh', 'noobi:environment:godot:choose',
+  'noobi:environment:godot:save', 'noobi:extensions:get', 'noobi:media-provider:save',
+  'noobi:media-provider:test', 'noobi:skills:list', 'noobi:skills:set-enabled',
+  'noobi:mcp:list', 'noobi:mcp:save', 'noobi:mcp:remove', 'noobi:prompts:list',
+  'noobi:prompts:save', 'noobi:prompts:reset', 'noobi:approval:resolve',
 ]);
 let browserStudio: Awaited<ReturnType<typeof startBrowserStudio>> | undefined;
 let mainWindow: BrowserWindow | null = null;
@@ -687,6 +697,7 @@ function bindIpc(): void {
   handle('noobi:runtime:logout', async () => runtimeStatusForUi(await runtime.logout()));
   handle('noobi:dialog:directory', async () => {
     const settings = await projectStore.getSettings();
+    if (browserMode && !mainWindow) return settings.defaultWorkspace;
     const options: Electron.OpenDialogOptions = {
       title: '选择默认项目存放位置',
       defaultPath: settings.defaultWorkspace,
@@ -699,6 +710,12 @@ function bindIpc(): void {
   });
   handle('noobi:dialog:project-directory', async () => {
     const settings = await projectStore.getSettings();
+    if (browserMode && !mainWindow) {
+      await mkdir(settings.defaultWorkspace, { recursive: true });
+      const directory = join(settings.defaultWorkspace, `造境在线-${Date.now()}-${randomUUID().slice(0, 8)}`);
+      await mkdir(directory);
+      return directory;
+    }
     while (true) {
       const options: Electron.OpenDialogOptions = {
         title: '创建或选择游戏项目文件夹',

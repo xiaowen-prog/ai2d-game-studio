@@ -48,6 +48,12 @@ function viewHref(view: PreviewView, project?: string) {
   if (view === 'studio' && project) url.searchParams.set('project', project); else url.searchParams.delete('project');
   return `${url.pathname}${url.search}${url.hash}`;
 }
+function liveHref() {
+  const url = new URL(location.href);
+  url.searchParams.set('live', '1');
+  url.searchParams.delete('design');
+  return `${url.pathname}${url.search}${url.hash}`;
+}
 function loadLibrary() {
   try {
     const raw = localStorage.getItem(PREVIEW_LIBRARY_KEY);
@@ -242,7 +248,7 @@ export function StudioPreview() {
   return <div className={`zp zp-view-${view}`} ref={page} onPointerDownCapture={keepComposerLayout}>
     <header className="zp-header"><button className="zp-brand" aria-label="造境，返回创作大厅" onClick={() => navigate('home')}><StudioMark /><strong>造境</strong></button>
       <nav className="zp-nav" aria-label="主要导航">{([['home', '创作大厅'], ['projects', '我的项目']] as const).map(([target, label]) => <a key={target} href={viewHref(target)} aria-current={view === target ? 'page' : undefined} onClick={event => followLink(event, target)}>{label}</a>)}</nav>
-      <div className="zp-header-end"><button className="zp-preview-badge" aria-label="设计预览说明" onClick={() => setModal('help')}><span className="zp-preview-label">设计预览</span><CircleHelp size={15} /></button></div>
+      <div className="zp-header-end"><a className="zp-live-link" href={liveHref()}><span>打开实时制作台</span><ArrowUpRight size={15} /></a><button className="zp-preview-badge" aria-label="设计预览说明" onClick={() => setModal('help')}><span className="zp-preview-label">设计预览</span><CircleHelp size={15} /></button></div>
     </header>
     {view === 'home' ? <main>
       <section className="zp-home-hero"><div className="zp-hero-copy"><h1>把脑海里的世界，<br />做成能玩的游戏。</h1><p className="zp-hero-description">用一句话描述想法，和 AI 一起完成角色、关卡与游戏。</p>
