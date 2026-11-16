@@ -6,8 +6,8 @@ import {
 } from 'lucide-react';
 import forest from './assets/forest-level.png';
 import runner from './assets/forest-runner.png';
-import bamboo from '../../../docs/product/设计参考/spline-preview/assets/scene.png';
-import swordsman from '../../../docs/product/设计参考/spline-preview/assets/character-a.png';
+import bamboo from './assets/bamboo-scene.png';
+import swordsman from './assets/bamboo-character.png';
 import {
   applyPreviewMessage, confirmPreviewStage, newPreviewProject, openPreviewStage, selectPreviewVersion,
   previewSteps as steps, previewSuggestions as suggestions, type PreviewProject, type PreviewVersion,

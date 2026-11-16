@@ -6,7 +6,7 @@
 
 ## 当前进度：3-2 已验收，阶段 5 收尾完成
 
-**3-1 的 Spline 方案已接入正式制作台；refined 预览保留为独立设计入口。**顶部进度、大幅真实成果与右侧 AI 搭档，保留确认、修改、恢复与导出。Mac / Windows 测试包已交付，工程自检和真实模型冒烟通过，用户已于 2026-11-13 确认 3-2 验收通过。
+**当前公开网页入口统一使用 refined 视觉预览。**正式制作台仍保留真实生成、确认、修改、恢复与导出能力；浏览器公开入口不会再切换到旧设计稿。Mac / Windows 测试包已交付，工程自检和真实模型冒烟通过，用户已于 2026-11-13 确认 3-2 验收通过。
 
 - [新视觉预览、Skill 审查与查看步骤](docs/product/evidence/阶段3-2/视觉预览-2026-11-06/视觉审查说明.md)：本次本机入口 `http://127.0.0.1:52362/?design=refined`，仅演示页面，不执行生成或修改真实项目。
 - [refined 最新交互修正与查看步骤](docs/product/evidence/阶段3-2/视觉预览-2026-11-06/交互审查修正/修正与验收.md)：项目从方向待确认开始，预设建议会改变本地画面并保留演示版本；试玩与真实 AI 尚未接入该预览。
@@ -21,7 +21,7 @@
 - [3-1 验收清单](docs/product/evidence/阶段3-1/照着做清单.md)
 - [3-1 技术开发文档](docs/product/阶段文档/阶段3-1技术开发文档.md)
 
-- [打开设计预览](docs/product/设计参考/spline-preview/index.html)
+- [打开 refined 设计预览](https://zaojing-game-studio-preview.dear-vale-4884.chatgpt.site)
 - [设计方案与范围](docs/product/阶段文档/前端适配声明.md)
 - [3-0 设计确认清单](docs/product/evidence/阶段3-0/照着做清单.md)
 

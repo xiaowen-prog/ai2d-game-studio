@@ -30,4 +30,4 @@
 
 人物、竹林沿用 Linear 预览内已复制的项目素材。没有图片生成、模型调用、游戏运行、登录或导出动作。预览只演示本地页面切换、确认、修改影响、版本影响和放大查看。
 
-[打开 Spline 预览](spline-preview/index.html)；[旧版 Linear 对照](linear-preview/index.html)。旧稿保留，新的主参考以本文件为准。
+该 Spline 静态稿与 Linear 对照稿已按用户选择从工作树删除，仅保留历史说明。当前公开视觉以 `src/renderer/design/StudioPreview.tsx` 和 `studio-preview.css` 为唯一来源。
