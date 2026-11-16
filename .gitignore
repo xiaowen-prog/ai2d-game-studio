@@ -16,5 +16,6 @@ coverage/
 credentials*.json
 service-account*.json
 .noobi-private/
+/deploy/cloudrun/zaojing-web/client/
 *.tsbuildinfo
 *.tmp

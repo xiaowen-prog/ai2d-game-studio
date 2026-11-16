@@ -36,6 +36,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.renderer.json && tsc --noEmit -p tsconfig.main.json",
     "build:renderer": "vite build",
     "build:main": "tsc -p tsconfig.main.json",
+    "prepare:cloudrun": "node scripts/prepare-cloudrun-preview.mjs",
     "build": "npm run clean && npm run typecheck && npm run build:renderer && npm run build:main",
     "test": "vitest run",
     "test:watch": "vitest",
