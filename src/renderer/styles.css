@@ -6929,7 +6929,7 @@ a {
 .home-first-use ol{display:flex;flex-wrap:wrap;gap:8px 26px;padding-left:18px;font-size:12px;line-height:1.7;margin:8px 0 0}.home-first-use>button{flex-shrink:0}
 .home-send-hint{display:block;margin-top:12px;color:var(--studio-muted);font-size:12px}
 .runtime-card summary{cursor:pointer;font-size:12px;line-height:1.8}.runtime-card[open] summary{margin-bottom:14px}
-@media(max-width:760px){.home-first-use{align-items:stretch;flex-direction:column;gap:12px;padding:16px}.home-first-use ol{flex-direction:column;gap:4px}.home-send-hint{font-size:11px}}
+@media(max-width:760px){.home-first-use{align-items:stretch;flex-direction:column;gap:12px;padding:16px}.home-first-use ol{flex-direction:column;gap:4px}.home-send-hint{font-size:12px}}
 
 .home-prompt-card.is-dragging {
   border-color: var(--studio-accent);
@@ -7635,7 +7635,7 @@ a {
 
 .agent-pane-heading span:first-child {
   color: var(--studio-accent);
-  font: 700 8px/1 var(--mono);
+  font: 700 12px/1 var(--mono);
   letter-spacing: 0.12em;
 }
 
@@ -7653,7 +7653,7 @@ a {
 
 .agent-pane-heading small {
   color: var(--studio-muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .view-workbench .event-stream {
@@ -7675,7 +7675,7 @@ a {
 
 .view-workbench .brief-card .eyebrow {
   color: var(--studio-accent);
-  font-size: 8px;
+  font-size: 12px;
 }
 
 .view-workbench .brief-card h2 {
@@ -7698,7 +7698,7 @@ a {
 .view-workbench .brief-card footer {
   margin-top: 10px;
   border-top-color: var(--studio-border);
-  font-size: 8px;
+  font-size: 12px;
 }
 
 .view-workbench .stream-empty {
@@ -7743,7 +7743,7 @@ a {
 
 .view-workbench .event-card pre {
   color: var(--studio-muted);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.55;
 }
 
@@ -7788,7 +7788,7 @@ a {
   border-radius: 9px;
   background: var(--studio-surface-raised);
   color: var(--studio-text);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .view-workbench .composer-action.is-send {
@@ -7852,7 +7852,7 @@ a {
 
 .pipeline.is-compact li strong {
   color: var(--studio-text);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .pipeline.is-compact li small {
@@ -7880,7 +7880,7 @@ a {
 .studio-canvas .inspector-tabs button {
   border-right-color: var(--studio-border);
   color: var(--studio-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .studio-canvas .inspector-tabs button.is-active {
@@ -10574,7 +10574,7 @@ a {
 .view-workbench .inspector-tabs button {
   border-radius: 2px;
   font-family: var(--pixel-cjk);
-  font-size: 9px;
+  font-size: 12px;
   font-synthesis: none;
 }
 

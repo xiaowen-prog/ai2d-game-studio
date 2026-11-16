@@ -10,7 +10,10 @@ export interface PreviewLibraryItem {
   deletedAt: number | null;
   workflow: PreviewProject;
 }
+export const PREVIEW_LIBRARY_VERSION = 1;
 export const PREVIEW_LIBRARY_KEY = 'zaojing.refined.library.v1';
+export const PREVIEW_LIBRARY_BACKUP_KEY = 'zaojing.refined.library.backup.v1';
+export const PREVIEW_LIBRARY_LEGACY_KEYS = ['zaojing.refined.library'] as const;
 export function initialPreviewLibrary(): PreviewLibraryItem[] {
   return [
     { id: 'forest', name: '林间跃迁', kind: 'forest', idea: '一个清晨森林里的横版闯关游戏，主角可以二段跳，沿途收集光点。' },
@@ -31,6 +34,15 @@ export function removePreviewItem(items: PreviewLibraryItem[], id: string, now =
 }
 export function restorePreviewItem(items: PreviewLibraryItem[], id: string): PreviewLibraryItem[] {
   return items.map(item => item.id === id ? { ...item, deletedAt: null } : item);
+}
+/** Keep user-created projects recent-first while leaving bundled examples in their authored order. */
+export function sortPreviewLibraryItems(items: readonly PreviewLibraryItem[]): PreviewLibraryItem[] {
+  const userItems = items.filter(item => !item.sample).sort((a, b) => {
+    const timeA = a.updatedAt ?? 0;
+    const timeB = b.updatedAt ?? 0;
+    return timeB - timeA;
+  });
+  return [...userItems, ...items.filter(item => item.sample)];
 }
 export function previewProgress(project: PreviewProject) {
   return { step: project.stage + 1, label: previewSteps[project.stage], status: project.stage === 5 ? '待导出 · 仅预览' : project.confirmedThrough >= project.stage ? '已确认' : '待确认' };
@@ -53,7 +65,7 @@ function validWorkflow(value: unknown): value is PreviewProject {
 /** Reject invalid records without overwriting the original browser storage. */
 export function parsePreviewLibrary(raw: string): PreviewLibraryItem[] {
   const data: unknown = JSON.parse(raw);
-  if (!object(data) || data.version !== 1 || !Array.isArray(data.items) || !data.items.every(item => object(item)
+  if (!object(data) || data.version !== PREVIEW_LIBRARY_VERSION || !Array.isArray(data.items) || !data.items.every(item => object(item)
     && typeof item.id === 'string' && item.id.length > 0 && typeof item.name === 'string' && item.name.trim().length > 0
     && (item.kind === 'forest' || item.kind === 'bamboo') && typeof item.sample === 'boolean'
     && (item.updatedAt === null || typeof item.updatedAt === 'number' && Number.isFinite(item.updatedAt))
@@ -61,4 +73,6 @@ export function parsePreviewLibrary(raw: string): PreviewLibraryItem[] {
     || new Set(data.items.map(item => item.id)).size !== data.items.length) throw new Error('Invalid preview library');
   return data.items as unknown as PreviewLibraryItem[];
 }
-export function serializePreviewLibrary(items: PreviewLibraryItem[]): string { return JSON.stringify({ version: 1, items }); }
+export function serializePreviewLibrary(items: PreviewLibraryItem[]): string {
+  return JSON.stringify({ version: PREVIEW_LIBRARY_VERSION, items });
+}

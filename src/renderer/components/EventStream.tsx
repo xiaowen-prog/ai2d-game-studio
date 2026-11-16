@@ -45,8 +45,16 @@ export function EventStream({ project, events }: EventStreamProps) {
     return () => cancelAnimationFrame(frame);
   }, [events.length, events.at(-1)?.message, project.id]);
 
+  const latestEvent = events.at(-1);
+  const liveMessage = latestEvent
+    ? `${EVENT_KIND_LABELS[latestEvent.kind]}：${latestEvent.title}。${latestEvent.message.length > 180 ? `${latestEvent.message.slice(0, 180)}…` : latestEvent.message}`
+    : '';
+
   return (
-    <div className="event-stream" ref={streamRef} aria-live="polite">
+    <div className="event-stream" ref={streamRef}>
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {liveMessage}
+      </div>
       <article className="brief-card">
         <span className="eyebrow">01 / CREATIVE BRIEF</span>
         <h2>{project.name}</h2>
@@ -66,12 +74,12 @@ export function EventStream({ project, events }: EventStreamProps) {
           <p>
             {project.status === 'draft'
               ? '启动后，这里会持续展示计划、工具调用、文件变化和验证结果。'
-              : '在下方输入修改要求，Noobi 会在同一 Codex 线程中继续。'}
+              : '在下方输入修改要求，造境助手会在同一 Codex 线程中继续。'}
           </p>
         </div>
       ) : null}
 
-      <div className="event-list">
+      <div className="event-list" role="log" aria-live="off" aria-label="制作事件记录">
         {events.map((event) => {
           const Icon = EVENT_ICONS[event.kind];
           const isLong = event.message.length > 520;

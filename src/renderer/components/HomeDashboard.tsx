@@ -51,6 +51,7 @@ const IMAGE_ACCEPT = '.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp';
 const FILE_ACCEPT = IMAGE_ACCEPT;
 const SUPPORTED_ATTACHMENT = /\.(?:png|jpe?g|webp)$/iu;
 const MAX_HOME_ATTACHMENTS = 20;
+const ATTACHMENT_HELP = '支持 PNG、JPEG、WebP，单张不超过 10 MB';
 
 export interface HomeLaunchInput {
   idea: string;
@@ -104,7 +105,8 @@ export function HomeDashboard({
     () => models.find((item) => item.model === model) ?? models[0] ?? null,
     [model, models],
   );
-  const runtimeReady = runtime.state === 'ready' && Boolean(runtime.account);
+  const accountReady = runtime.state === 'ready' && Boolean(runtime.account);
+  const runtimeReady = accountReady && imageGenerationAvailable;
   const launchReady = idea.trim().length > 0 && !busy;
   useEffect(() => { try { localStorage.setItem('creation-home-idea', idea); } catch { /* Keep the current text in memory. */ } }, [idea]);
 
@@ -137,7 +139,8 @@ export function HomeDashboard({
 
   async function submit() {
     if (!launchReady) return;
-    if (!runtimeReady) { onOpenSettings('account'); return; }
+    if (!accountReady) { onOpenSettings('account'); return; }
+    if (!imageGenerationAvailable) { onOpenSettings('media'); return; }
     await onLaunch({
       idea: idea.trim(),
       model: activeModel?.model ?? null,
@@ -227,7 +230,7 @@ export function HomeDashboard({
         <section className="home-hero" aria-labelledby="home-title">
           <div className="home-hero-content">
             <span className={`home-loop-status ${runtimeReady ? 'is-ready' : 'is-attention'}`}>
-              <i /> {runtimeReady ? 'AI 已连接，可以开始' : '先连接 AI，想法可以先写'} <ArrowRight size={13} />
+              <i /> {!accountReady ? '先连接 AI，想法可以先写' : !imageGenerationAvailable ? '图片能力待配置' : 'AI 已连接，可以开始'} <ArrowRight size={13} />
             </span>
             <h1 id="home-title">把脑海里的世界，<wbr />做成能玩的游戏。</h1>
             <p>从一句话开始。AI 分步制作，每一步都由你确认。</p>
@@ -298,11 +301,11 @@ export function HomeDashboard({
               {attachmentNotice ? <div className="home-attachment-notice" role="status">{attachmentNotice}</div> : null}
               <div className="home-prompt-controls">
                 <div className="home-attachment-actions">
-                  <button type="button" disabled={busy} onClick={() => imageInputRef.current?.click()}>
+                  <button type="button" disabled={busy} title={ATTACHMENT_HELP} onClick={() => imageInputRef.current?.click()}>
                     <ImagePlus size={15} /> 图片
                   </button>
-                  <button type="button" disabled={busy} onClick={() => fileInputRef.current?.click()}>
-                    <Paperclip size={15} /> 文件
+                  <button type="button" disabled={busy} title={ATTACHMENT_HELP} onClick={() => fileInputRef.current?.click()}>
+                    <Paperclip size={15} /> 参考图
                   </button>
                 </div>
                 <ModelPicker
@@ -336,17 +339,20 @@ export function HomeDashboard({
                 <div className="home-attachment-drop" role="status">
                   <Paperclip size={22} />
                   <strong>松开即可添加到游戏需求</strong>
-                  <span>支持 PNG、JPEG、WebP 参考图，单张不超过 10 MB</span>
+                  <span>{ATTACHMENT_HELP}</span>
                 </div>
               ) : null}
             </div>
 
             <small className="home-send-hint">Enter 发送 · Shift + Enter 换行 · 想法会自动保存</small>
-            {!runtimeReady ? <section className="home-first-use" aria-label="首次使用指引">
-              <div><strong>{runtime.account ? 'AI 连接暂时不可用' : '第一次使用？先登录 Codex'}</strong>
+            {!runtimeReady ? <section className="home-first-use" aria-label="开始制作前的准备">
+              {!accountReady ? <div><strong>{runtime.account ? 'AI 连接暂时不可用' : '第一次使用？先登录 Codex'}</strong>
                 <p>{runtime.account ? '打开账户设置检查连接，再回来发送。你的想法会保留。' : '用已有 ChatGPT 账号连接 AI，不需要写代码。登录后回来发送想法，AI 会先给你方向卡。'}</p>
                 <ol><li>打开账户设置</li><li>在官方页面完成登录</li><li>回来发送游戏想法</li></ol></div>
-              <button type="button" className="primary-button" onClick={() => onOpenSettings('account')}>{runtime.account ? '检查连接' : '去登录'}</button>
+                : <div><strong>还差一步：配置图片能力</strong>
+                  <p>制作台会用图片生成角色和场景。先在媒体设置里完成配置，再开始制作。</p>
+                  <ol><li>打开媒体设置</li><li>连接图片生成方式</li><li>回来发送游戏想法</li></ol></div>}
+              <button type="button" className="primary-button" onClick={() => onOpenSettings(accountReady ? 'media' : 'account')}>{accountReady ? '配置图片能力' : runtime.account ? '检查连接' : '去登录'}</button>
             </section> : null}
             <p className="studio-home-scope">支持 2D 横版闯关和俯视打怪，题材不限</p>
             <div className="home-idea-starters" aria-label="游戏创意快捷选项">

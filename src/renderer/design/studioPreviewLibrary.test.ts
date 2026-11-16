@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyPreviewMessage, confirmPreviewStage, openPreviewStage } from './studioPreviewState';
-import { createPreviewItem, initialPreviewLibrary, parsePreviewLibrary, previewProgress, removePreviewItem, renamePreviewItem, restorePreviewItem, serializePreviewLibrary } from './studioPreviewLibrary';
+import { createPreviewItem, initialPreviewLibrary, parsePreviewLibrary, previewProgress, removePreviewItem, renamePreviewItem, restorePreviewItem, serializePreviewLibrary, sortPreviewLibraryItems } from './studioPreviewLibrary';
 
 describe('design-preview project library', () => {
   it('creates independent projects without replacing either example, then survives serialization', () => {
@@ -46,5 +46,16 @@ describe('design-preview project library', () => {
     const [item] = initialPreviewLibrary();
     expect(() => parsePreviewLibrary(serializePreviewLibrary([item, item]))).toThrow();
     expect(() => parsePreviewLibrary('{broken')).toThrow();
+  });
+  it('sorts user projects by recent edits while keeping bundled examples stable', () => {
+    const examples = initialPreviewLibrary();
+    const older = createPreviewItem('旧项目', 'forest', '', 'older', 10);
+    const newer = createPreviewItem('新项目', 'forest', '', 'newer', 20);
+    expect(sortPreviewLibraryItems([examples[1], newer, examples[0], older]).map(item => item.id))
+      .toEqual(['newer', 'older', 'bamboo', 'forest']);
+  });
+  it('keeps a valid backup payload parseable for recovery after the primary key is corrupted', () => {
+    const backup = serializePreviewLibrary([createPreviewItem('备份项目', 'forest', '保留这条记录', 'backup', 10)]);
+    expect(parsePreviewLibrary(backup)[0]).toMatchObject({ id: 'backup', name: '备份项目' });
   });
 });

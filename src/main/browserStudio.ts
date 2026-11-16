@@ -1,10 +1,12 @@
 import { createServer, type ServerResponse } from 'node:http';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 
 type Operation = (...args: any[]) => unknown;
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const contentTypes: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml',
@@ -24,10 +26,27 @@ export async function startBrowserStudio(
       .map((value) => value.trim())
       .filter(Boolean),
   );
+  const sessionToken = randomBytes(32).toString('base64url');
+  const sessionExpiresAt = Date.now() + SESSION_TTL_MS;
   const clients = new Set<ServerResponse>();
+  const matchesSession = (candidate: string | undefined) => {
+    if (!candidate || Date.now() >= sessionExpiresAt) return false;
+    const expected = Buffer.from(sessionToken);
+    const actual = Buffer.from(candidate);
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
+  };
+  const sessionFromRequest = (request: import('node:http').IncomingMessage, url: URL) => {
+    const header = request.headers['x-noobi-session'];
+    return typeof header === 'string' ? header : url.searchParams.get('token') ?? undefined;
+  };
+  const sendError = (response: ServerResponse, status: number, code: string, message: string) => {
+    if (response.headersSent || response.destroyed) return;
+    response.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify({ code, error: message }));
+  };
   const server = createServer(async (request, response) => {
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('X-Frame-Options', 'DENY');
+    response.setHeader('Referrer-Policy', 'no-referrer');
     response.setHeader('Cache-Control', 'no-store');
     try {
       if (request.headers.host !== host) {
@@ -44,7 +63,7 @@ export async function startBrowserStudio(
       if (trustedCrossOrigin) {
         response.setHeader('Access-Control-Allow-Origin', requestOrigin);
         response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-        response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        response.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Noobi-Session');
         response.setHeader('Access-Control-Allow-Private-Network', 'true');
         response.setHeader('Vary', 'Origin');
       }
@@ -57,6 +76,10 @@ export async function startBrowserStudio(
         }
         if (!trustedCrossOrigin && request.headers['sec-fetch-site'] !== 'same-origin') {
           response.writeHead(403).end();
+          return;
+        }
+        if (!matchesSession(sessionFromRequest(request, url))) {
+          sendError(response, 401, 'SESSION_REQUIRED', '本机制作台会话已失效，请从桌面应用重新打开。');
           return;
         }
         if (request.method === 'GET' && path === '/studio/events') {
@@ -92,8 +115,17 @@ export async function startBrowserStudio(
             return;
           }
         }
-        const args: unknown = JSON.parse(body);
-        if (!Array.isArray(args)) throw new Error('请求格式有误。');
+        let args: unknown;
+        try {
+          args = JSON.parse(body);
+        } catch {
+          sendError(response, 400, 'INVALID_JSON', '请求格式有误。');
+          return;
+        }
+        if (!Array.isArray(args)) {
+          sendError(response, 400, 'INVALID_REQUEST', '请求格式有误。');
+          return;
+        }
         const value = await operation(...args);
         response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(value ?? null));
         return;
@@ -109,11 +141,8 @@ export async function startBrowserStudio(
       });
       await pipeline(createReadStream(file), response);
     } catch (error) {
-      if (!response.headersSent && !response.destroyed) {
-        response.writeHead(400, { 'Content-Type': 'application/json' }).end(JSON.stringify({
-          error: error instanceof Error ? error.message : '操作失败。',
-        }));
-      }
+      console.error('[browser-studio]', error);
+      sendError(response, 400, 'OPERATION_FAILED', '操作未完成，请回到桌面制作台查看详细信息。');
     }
   });
   await new Promise<void>((resolve, reject) => {
@@ -126,7 +155,7 @@ export async function startBrowserStudio(
   const host = `127.0.0.1:${address.port}`;
   const origin = `http://${host}`;
   return {
-    url: origin,
+    url: `${origin}/?studioToken=${encodeURIComponent(sessionToken)}`,
     broadcast(channel: string, payload: unknown) {
       const message = `event: ${channel}\ndata: ${JSON.stringify(payload)}\n\n`;
       for (const client of clients) {

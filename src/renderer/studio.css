@@ -72,7 +72,7 @@
   -webkit-font-smoothing: antialiased; max-width: 640px;
 }
 .studio-mode .home-hero-content > p { font-size: 14px; color: var(--muted); }
-.studio-mode .home-loop-status { border: 0; background: var(--panel); color: var(--text-soft); font: 400 11px var(--sans); padding: 9px 12px; border-radius: 99px; box-shadow: none; }
+.studio-mode .home-loop-status { border: 0; background: var(--panel); color: var(--text-soft); font: 400 12px var(--sans); padding: 9px 12px; border-radius: 99px; box-shadow: none; }
 .studio-mode .home-loop-status i { background: var(--text-soft); box-shadow: none; }
 .studio-mode .home-prompt-card {
   margin-top: 28px; background: var(--studio-surface);
@@ -91,10 +91,10 @@
 .studio-mode .secondary-button { border-radius: 12px; background: var(--panel-hover); color: var(--text); }
 .studio-mode .home-idea-starters { margin-top: 12px; }
 .studio-mode .home-idea-starters button { background: var(--panel); color: var(--text-soft); border: 0; border-radius: 99px; padding: 10px 16px; box-shadow: none; }
-.studio-mode .home-hero-content > .studio-home-scope { margin-top: 24px; font-size: 11px; color: var(--muted); }
+.studio-mode .home-hero-content > .studio-home-scope { margin-top: 24px; font-size: 12px; color: var(--muted); }
 .studio-mode .home-projects { width: min(100%, 1120px); margin: 0 auto; padding: 20px 32px 48px; border: 0; background: transparent; box-shadow: none; }
 .studio-mode .home-projects h2 { font: 500 22px var(--sans); color: var(--text); }
-.studio-mode .home-projects > header span { color: var(--muted); font: 11px var(--sans); letter-spacing: 0; }
+.studio-mode .home-projects > header span { color: var(--muted); font: 12px var(--sans); letter-spacing: 0; }
 .studio-mode .home-project-grid > button { background: var(--panel); border: 1px solid transparent; border-radius: 16px; box-shadow: none; color: var(--text); }
 .studio-mode .home-project-grid > button:hover { border-color: var(--line-strong); background: var(--panel-hover); }
 .studio-mode .home-project-copy strong { font-weight: 500; }
@@ -126,14 +126,17 @@
   .studio-mode .home-hero h1 { font-size: 32px; }
   .studio-mode .home-first-use { flex-direction: column; align-items: stretch; }
 }
-@media (prefers-reduced-motion: reduce) { .studio-mode .project-rail { transition: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .studio-mode .project-rail,
+  .studio-mode .home-scene-switch button { transition: none; }
+}
 
 .environment-install-guide { padding: 18px 20px; margin: 16px 0; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; }
 .environment-install-guide h4 { margin: 0 0 12px; color: var(--text); font-size: 14px; font-weight: 500; }
 .environment-install-guide ol { margin: 0; padding-left: 20px; color: var(--text-soft); font-size: 12px; line-height: 1.9; }
 .environment-install-guide li + li { margin-top: 8px; }
 .environment-install-guide a { text-decoration: underline; text-underline-offset: 3px; color: var(--text); }
-.environment-install-guide p { margin: 12px 0 0; color: var(--muted); font-size: 11px; line-height: 1.8; }
+.environment-install-guide p { margin: 12px 0 0; color: var(--muted); font-size: 12px; line-height: 1.8; }
 
 .studio-mode .home-scene {
   min-width: 0; margin: 0 20px 32px; overflow: hidden;

@@ -59,12 +59,18 @@ export function CreationWorkspace({ project, workflow, onChanged, onSettings, la
   const appearanceTarget = canEditAppearance ? editTarget : retryAppearance;
   const gameStep = workflow.steps.game;
   const canExport = isCreationStageEnabled('delivery', lastEnabledStage) && gameStep.status === 'confirmed' && Boolean(gameStep.artifact?.round);
+  const deliveryLauncher = typeof navigator !== 'undefined' && /Win/u.test(navigator.platform)
+    ? '打开网页游戏.cmd'
+    : '打开网页游戏.command';
   useEffect(() => { try { localStorage.setItem(draftKey, JSON.stringify(drafts)); localStorage.removeItem(`creation-draft:${project.id}`); } catch { /* Current text remains editable if local storage is unavailable. */ } }, [draftKey, drafts, project.id]);
   useEffect(() => {
     if (priorStage.current !== workflow.currentStage) {
       setView(workflow.currentStage); priorStage.current = workflow.currentStage;
     }
   }, [workflow.currentStage]);
+  useEffect(() => {
+    if (checkpointId && !workflow.history.some((item) => item.id === checkpointId)) setCheckpointId('');
+  }, [checkpointId, workflow.history]);
   useEffect(() => {
     let active = true;
     setPreviewResult(null); setPreviewError('');
@@ -165,10 +171,10 @@ export function CreationWorkspace({ project, workflow, onChanged, onSettings, la
             <p>来源游戏版本：{artifact.delivery.sourceVersionId.slice(0, 8)} · {artifact.delivery.fileCount} 个文件<br />导出时间：{new Date(artifact.createdAt).toLocaleString()}</p>
             {preview?.exportDirectory ? <p>{preview.exportDirectory}</p> : null}
             <button type="button" disabled={pending || !preview?.exportDirectory} onClick={() => void revealDelivery()}>{location.protocol === 'file:' || import.meta.env.DEV ? '打开交付文件夹' : '下载交付 ZIP'}</button>
-            <small>此页预览使用导出包中的网页文件。文件夹内双击“打开网页游戏.command”运行，需要 Python 3。工程用 Godot 4 打开。尚未托管为公网链接。</small></div> : null}
+            <small>此页预览使用导出包中的网页文件。文件夹内双击“{deliveryLauncher}”运行，需要 Python 3。工程用 Godot 4 打开。尚未托管为公网链接。</small></div> : null}
           </> : null}
         </div>
-        <footer className="creation-canvas-footer"><span>每一步，由你确认</span><button type="button" onClick={() => setHistoryOpen(true)}><History size={14} /> 已保存版本 · {workflow.history.length}</button></footer>
+      <footer className="creation-canvas-footer"><span>每一步，由你确认</span><button type="button" disabled={!workflow.history.length || busy || pending} title={workflow.history.length ? '打开版本记录' : '完成第一步后可恢复'} aria-label={workflow.history.length ? `打开版本记录，共 ${workflow.history.length} 个版本` : '暂无可恢复版本，完成第一步后可恢复'} onClick={() => { setCheckpointId(''); setHistoryOpen(true); }}><History size={14} /> {workflow.history.length ? `已保存版本 · ${workflow.history.length}` : '暂无可恢复版本'}</button></footer>
       </section>
       <aside className="creation-assistant" aria-label="AI 创作搭档">
         <header className="creation-assistant-heading"><span className="creation-assistant-mark"><Sparkles size={18} /></span><div><h2>创作搭档</h2><p>{busy ? '正在制作，完成后等你确认' : '说出想法，一起做成游戏'}</p></div></header>
@@ -223,15 +229,15 @@ export function CreationWorkspace({ project, workflow, onChanged, onSettings, la
       </footer>}
       </aside>
     </div>
-    {historyOpen ? <Modal eyebrow="版本记录" title="恢复已保存的成果" className="creation-dialog" onClose={() => setHistoryOpen(false)} description="恢复前会再次说明影响，较新的版本仍会保留。">
+    {historyOpen ? <Modal eyebrow="版本记录" title="恢复已保存的成果" className="creation-dialog" onClose={() => { setHistoryOpen(false); setCheckpointId(''); }} description="恢复前会再次说明影响，较新的版本仍会保留。">
       <div className="creation-history">
         <label htmlFor="creation-history">已保存版本</label>
         <select id="creation-history" value={checkpointId} disabled={busy || pending} onChange={(event) => setCheckpointId(event.target.value)}>
           <option value="">选择要恢复的版本</option>
-          {[...workflow.history].reverse().filter((item) => isCreationStageEnabled(item.stage, lastEnabledStage)).map((item, index) => <option key={item.id} value={item.id}>{workflow.history.length - index}. {item.label} · {new Date(item.createdAt).toLocaleString()}</option>)}
+          {[...workflow.history].reverse().filter((item) => isCreationStageEnabled(item.stage, lastEnabledStage)).map((item) => <option key={item.id} value={item.id}>{item.label} · {new Date(item.createdAt).toLocaleString()}</option>)}
         </select>
         <button type="button" disabled={!checkpointId || busy || pending}
-          onClick={() => { setHistoryOpen(false); setImpact({ action: 'restore', checkpointId, expectedRevision: workflow.revision }); }}><RotateCcw size={14} /> 恢复这个版本</button>
+          onClick={() => { setHistoryOpen(false); setCheckpointId(''); setImpact({ action: 'restore', checkpointId, expectedRevision: workflow.revision }); }}><RotateCcw size={14} /> 恢复这个版本</button>
       </div>
     </Modal> : null}
       {impact ? <Modal eyebrow="修改影响" className="creation-dialog" title={impact.action === 'restore' ? '恢复整套已保存成果' : impact.action === 'revise-appearance' ? '只修改外观，保留玩法' : impact.action === 'edit-character' ? '返回修改人物形象' : impact.action === 'select' ? '更换已确认人物' : `修改已确认的${title}`} onClose={pending ? undefined : () => setImpact(null)}

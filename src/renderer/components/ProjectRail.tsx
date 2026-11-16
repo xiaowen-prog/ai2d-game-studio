@@ -84,12 +84,21 @@ export function ProjectRail({
 }: ProjectRailProps) {
   const [menu, setMenu] = useState<ProjectMenuState | null>(null);
   const firstMenuItemRef = useRef<HTMLButtonElement>(null);
+  const menuTriggerRef = useRef<HTMLElement | null>(null);
   const collapsedWorkbench = variant === 'workbench' && !open;
+
+  function closeMenu(restoreFocus = true) {
+    const trigger = menuTriggerRef.current;
+    setMenu(null);
+    if (restoreFocus) requestAnimationFrame(() => {
+      if (trigger?.isConnected) trigger.focus();
+    });
+  }
 
   useEffect(() => {
     if (!menu) return;
     const frame = requestAnimationFrame(() => firstMenuItemRef.current?.focus());
-    const close = () => setMenu(null);
+    const close = () => closeMenu();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') close();
     };
@@ -108,19 +117,24 @@ export function ProjectRail({
   }
 
   function openProjectMenu(project: ProjectRecord, trigger: HTMLButtonElement) {
+    menuTriggerRef.current = trigger;
     const rect = trigger.getBoundingClientRect();
     openProjectMenuAt(project, rect.right - PROJECT_MENU_WIDTH, rect.bottom + 6);
   }
 
   function openContextMenu(event: ReactMouseEvent, project: ProjectRecord) {
     event.preventDefault();
+    const target = event.currentTarget;
+    menuTriggerRef.current = target.matches('button')
+      ? target as HTMLElement
+      : target.querySelector<HTMLElement>('.project-item-more');
     openProjectMenuAt(project, event.clientX, event.clientY);
   }
 
   function choose(action: (project: ProjectRecord) => void) {
     if (!menu) return;
     const project = menu.project;
-    setMenu(null);
+    closeMenu(false);
     action(project);
   }
 
@@ -236,7 +250,7 @@ export function ProjectRail({
                   title="项目操作"
                   onClick={(event) => {
                     event.stopPropagation();
-                    if (menu?.project.id === project.id) setMenu(null);
+                    if (menu?.project.id === project.id) closeMenu();
                     else openProjectMenu(project, event.currentTarget);
                   }}
                 >
@@ -310,7 +324,7 @@ export function ProjectRail({
             className="project-menu-dismiss"
             type="button"
             aria-label="关闭项目菜单"
-            onClick={() => setMenu(null)}
+            onClick={() => closeMenu()}
           />
           <div
             className="project-actions-menu"

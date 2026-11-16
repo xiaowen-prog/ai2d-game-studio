@@ -611,7 +611,7 @@ export function App() {
             <section className="production-center">
               <header className="agent-pane-heading">
                 <div>
-                  <span>NOOBI AGENT</span>
+                  <span>造境智能助手</span>
                   <button
                     className="agent-project-name"
                     type="button"

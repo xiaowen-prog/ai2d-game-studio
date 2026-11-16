@@ -6,17 +6,31 @@ const DEFAULT_LOCAL_BRIDGE = 'http://127.0.0.1:47621';
 export function installBrowserBridge(endpoint = ''): void {
   if (window.noobi) return;
   const sameOrigin = location.hostname === '127.0.0.1' || location.hostname === 'localhost';
-  const bridgeUrl = (endpoint || new URLSearchParams(location.search).get('bridge') || (sameOrigin ? '' : DEFAULT_LOCAL_BRIDGE)).replace(/\/$/u, '');
+  const params = new URLSearchParams(location.search);
+  const requestedBridge = endpoint || params.get('bridge') || (sameOrigin ? '' : DEFAULT_LOCAL_BRIDGE);
+  let bridgeUrl = requestedBridge.replace(/\/$/u, '');
+  let bridgeToken = params.get('studioToken') || '';
+  try {
+    const parsedBridge = new URL(requestedBridge);
+    bridgeToken ||= parsedBridge.searchParams.get('studioToken') || parsedBridge.searchParams.get('token') || '';
+    parsedBridge.search = '';
+    parsedBridge.hash = '';
+    bridgeUrl = parsedBridge.toString().replace(/\/$/u, '');
+  } catch { /* same-origin mode can intentionally leave endpoint empty */ }
   if (!sameOrigin && !bridgeUrl) return;
-  const events = new EventSource(`${bridgeUrl}/studio/events`);
+  const eventsUrl = new URL(`${bridgeUrl}/studio/events`);
+  if (bridgeToken) eventsUrl.searchParams.set('token', bridgeToken);
+  const events = new EventSource(eventsUrl);
   function subscribe<T>(channel: string, listener: (data: T) => void) {
     const receive = (event: MessageEvent<string>) => listener(JSON.parse(event.data) as T);
     events.addEventListener(channel, receive);
     return () => events.removeEventListener(channel, receive);
   }
   async function call<T>(channel: string, ...args: unknown[]): Promise<T> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (bridgeToken) headers['X-Noobi-Session'] = bridgeToken;
     const response = await fetch(`${bridgeUrl}/studio/noobi:${channel}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(args),
+      method: 'POST', headers, body: JSON.stringify(args),
     });
     const body = await response.json();
     if (!response.ok) throw new Error(typeof body.error === 'string' ? body.error : '操作失败。');
@@ -82,7 +96,9 @@ export function installBrowserBridge(endpoint = ''): void {
       preview: (projectId, versionId) => creation('creation:preview', projectId, versionId),
       revealDelivery: async (projectId, versionId) => {
         const link = document.createElement('a');
-        link.href = `${bridgeUrl}/studio/download?` + new URLSearchParams({ project: projectId, version: versionId });
+        const query = new URLSearchParams({ project: projectId, version: versionId });
+        if (bridgeToken) query.set('token', bridgeToken);
+        link.href = `${bridgeUrl}/studio/download?${query}`;
         link.download = 'game-package.zip';
         link.click();
         return { ok: true, value: undefined };

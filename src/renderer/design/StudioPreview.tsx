@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type MouseEvent, type PointerEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type PointerEvent } from 'react';
 import {
   ArrowLeft, ArrowRight, ArrowUpRight, Check, ChevronRight, CircleHelp,
   Download, Expand, FileArchive, FolderOpen, Gamepad2, Globe2, Layers3,
@@ -13,8 +13,9 @@ import {
   previewSteps as steps, previewSuggestions as suggestions, type PreviewProject, type PreviewVersion,
 } from './studioPreviewState';
 import {
-  PREVIEW_LIBRARY_KEY, createPreviewItem, initialPreviewLibrary, parsePreviewLibrary, previewProgress,
-  removePreviewItem, renamePreviewItem, restorePreviewItem, serializePreviewLibrary, type PreviewKind,
+  PREVIEW_LIBRARY_BACKUP_KEY, PREVIEW_LIBRARY_KEY, PREVIEW_LIBRARY_LEGACY_KEYS, createPreviewItem,
+  initialPreviewLibrary, parsePreviewLibrary, previewProgress, removePreviewItem, renamePreviewItem,
+  restorePreviewItem, serializePreviewLibrary, sortPreviewLibraryItems, type PreviewKind,
 } from './studioPreviewLibrary';
 import './studio-preview.css';
 
@@ -55,10 +56,20 @@ function liveHref() {
   return `${url.pathname}${url.search}${url.hash}`;
 }
 function loadLibrary() {
+  const keys = [PREVIEW_LIBRARY_KEY, PREVIEW_LIBRARY_BACKUP_KEY, ...PREVIEW_LIBRARY_LEGACY_KEYS];
+  let hadStoredData = false;
   try {
-    const raw = localStorage.getItem(PREVIEW_LIBRARY_KEY);
-    return { items: raw === null ? initialPreviewLibrary() : parsePreviewLibrary(raw), error: false };
-  } catch { return { items: initialPreviewLibrary(), error: true }; }
+    for (const key of keys) {
+      const raw = localStorage.getItem(key);
+      if (raw === null) continue;
+      hadStoredData = true;
+      try {
+        const items = parsePreviewLibrary(raw);
+        return { items, error: false, migrated: key !== PREVIEW_LIBRARY_KEY };
+      } catch { /* Try the backup or legacy key before showing a recovery warning. */ }
+    }
+  } catch { hadStoredData = true; }
+  return { items: initialPreviewLibrary(), error: hadStoredData, migrated: false };
 }
 function updatedLabel(time: number | null) {
   return time === null ? '尚未修改' : `更新于 ${new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(time)}`;
@@ -68,7 +79,7 @@ export function StudioPreview() {
   const [route, setRoute] = useState(readRoute);
   const [worldChoice, setWorldChoice] = useState(0);
   const [loaded] = useState(loadLibrary);
-  const [library, setLibrary] = useState(loaded.items);
+  const [library, setLibrary] = useState(() => sortPreviewLibraryItems(loaded.items));
   const [saveError, setSaveError] = useState(loaded.error);
   const [newName, setNewName] = useState('');
   const [newKind, setNewKind] = useState<PreviewKind>('forest');
@@ -97,8 +108,8 @@ export function StudioPreview() {
   const versionIndex = project.selected[step];
   const version = versions[versionIndex];
   const draft = project.drafts[step];
-  const activeProjects = library.filter(item => item.deletedAt === null);
-  const removedProjects = library.filter(item => item.deletedAt !== null);
+  const activeProjects = sortPreviewLibraryItems(library.filter(item => item.deletedAt === null));
+  const removedProjects = sortPreviewLibraryItems(library.filter(item => item.deletedAt !== null));
   const showsScene = step >= 2 && step <= 4;
   const visibleVersions = versions.slice(-3);
   const sceneRef = useRef<HTMLDivElement>(null);
@@ -112,7 +123,12 @@ export function StudioPreview() {
   }, [route, view]);
   useEffect(() => {
     if (loaded.error) return; // Preserve unreadable storage instead of overwriting it.
-    try { localStorage.setItem(PREVIEW_LIBRARY_KEY, serializePreviewLibrary(library)); setSaveError(false); }
+    try {
+      const serialized = serializePreviewLibrary(library);
+      localStorage.setItem(PREVIEW_LIBRARY_BACKUP_KEY, serialized);
+      localStorage.setItem(PREVIEW_LIBRARY_KEY, serialized);
+      setSaveError(false);
+    }
     catch { setSaveError(true); }
   }, [library, loaded.error]);
   useEffect(() => {
@@ -181,7 +197,7 @@ export function StudioPreview() {
     setNotice('已切换演示版本；确认此版本后才能继续后续步骤。');
   }
   function panStart(event: PointerEvent<HTMLDivElement>) {
-    if (event.pointerType !== 'mouse' || event.button !== 0 || zoom === 100) return;
+    if (event.button !== 0 || zoom === 100) return;
     const element = event.currentTarget;
     drag.current = { x: event.clientX, y: event.clientY, left: element.scrollLeft, top: element.scrollTop };
     element.setPointerCapture(event.pointerId); event.preventDefault();
@@ -194,6 +210,18 @@ export function StudioPreview() {
   function panEnd(event: PointerEvent<HTMLDivElement>) {
     drag.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  }
+
+  function panKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (zoom === 100) return;
+    const distance = event.shiftKey ? 96 : 36;
+    const movement = event.key === 'ArrowLeft' ? { left: -distance, top: 0 }
+      : event.key === 'ArrowRight' ? { left: distance, top: 0 }
+        : event.key === 'ArrowUp' ? { left: 0, top: -distance }
+          : event.key === 'ArrowDown' ? { left: 0, top: distance } : null;
+    if (!movement) return;
+    event.preventDefault();
+    event.currentTarget.scrollBy({ ...movement, behavior: 'auto' });
   }
 
   function keepComposerLayout(event: PointerEvent<HTMLDivElement>) {
@@ -229,13 +257,13 @@ export function StudioPreview() {
     return <div className={`zp-composition ${worldIndex === 1 ? 'zp-scene-topdown' : ''} ${thumbnail ? 'zp-composition-thumb' : ''}`}>
       <img className="zp-scene-background" draggable={false} src={world.image} alt={thumbnail ? '' : `${world.name}已有场景素材`} />
       <img className="zp-scene-runner" draggable={false} src={world.character} alt={thumbnail ? '' : '场景中的角色'} style={{ left: `${item.left}%`, transform: `scale(${item.size})` }} />
-      {guides && !thumbnail && <div className="zp-scene-guides" aria-label="只读路线标注"><svg viewBox="0 0 1000 560" preserveAspectRatio="none" aria-hidden="true"><path d="M175 428 Q350 190 500 340 T840 220" /></svg>{['起点', worldIndex === 0 ? '跳跃区' : '交战区', '终点'].map((name, index) => <span className={`zp-marker zp-marker-${index}`} key={name}>{name}</span>)}</div>}
+      {guides && !thumbnail && <div className="zp-scene-guides" role="group" aria-label="只读路线标注"><svg viewBox="0 0 1000 560" preserveAspectRatio="none" aria-hidden="true"><path d="M175 428 Q350 190 500 340 T840 220" /></svg>{['起点', worldIndex === 0 ? '跳跃区' : '交战区', '终点'].map((name, index) => <span className={`zp-marker zp-marker-${index}`} key={name}>{name}</span>)}</div>}
       {step === 4 && item.overlay && <div className="zp-game-overlay"><span>界面演示</span><strong>{item.overlay === 'victory' ? '抵达新的风景' : '稍作休息'}</strong><p>{item.overlay === 'victory' ? '这一段旅程，完成了。' : '游戏已暂停的界面样式'}</p></div>}
     </div>;
   }
   function renderScene(large = false) {
-    return <div ref={large ? undefined : sceneRef} className={`zp-scene ${zoom > 100 ? 'zp-scene-zoomed' : ''}`} tabIndex={zoom > 100 ? 0 : undefined} aria-label={zoom > 100 ? '放大画面，可拖动或用方向键查看' : undefined}
-      onPointerDown={panStart} onPointerMove={panMove} onPointerUp={panEnd} onPointerCancel={panEnd} onLostPointerCapture={() => { drag.current = null; }}>
+    return <div ref={large ? undefined : sceneRef} className={`zp-scene ${zoom > 100 ? 'zp-scene-zoomed' : ''}`} tabIndex={zoom > 100 ? 0 : undefined} role={zoom > 100 ? 'region' : undefined} aria-label={zoom > 100 ? '放大画面，可拖动或用方向键查看' : undefined}
+      onKeyDown={panKeyDown} onPointerDown={panStart} onPointerMove={panMove} onPointerUp={panEnd} onPointerCancel={panEnd} onLostPointerCapture={() => { drag.current = null; }}>
       <div className="zp-scene-picture" style={{ width: `${zoom}%`, height: `${zoom}%` }}>{renderComposition(version)}</div>
     </div>;
   }
@@ -284,8 +312,8 @@ export function StudioPreview() {
         </div>
       </main>}
     {(notice || saveError) && <div className="zp-toast" role={saveError ? "alert" : "status"}>{saveError ? "浏览器保存不可用，更改暂存在此页；请先不要关闭。" : notice}</div>}
-    <dialog ref={dialog} className={`zp-dialog ${modal === 'fullscreen' ? 'zp-dialog-wide' : ''}`} onCancel={() => setModal(null)} onClose={() => setModal(null)} onClick={event => { if (event.target === event.currentTarget) setModal(null); }}>
-      <header><h2>{modal === 'create' ? '新建项目' : modal === 'manage' ? '管理项目' : modal === 'trash' ? '最近删除' : modal === 'history' ? `${steps[step]} · 演示版本` : modal === 'export' ? '导出说明' : modal === 'fullscreen' ? `${world.name} · 放大查看` : '关于此预览'}</h2><button aria-label="关闭面板" onClick={() => setModal(null)}><X size={20} /></button></header>
+    <dialog ref={dialog} className={`zp-dialog ${modal === 'fullscreen' ? 'zp-dialog-wide' : ''}`} aria-labelledby="zp-dialog-title" onCancel={() => setModal(null)} onClose={() => setModal(null)} onClick={event => { if (event.target === event.currentTarget) setModal(null); }}>
+      <header><h2 id="zp-dialog-title">{modal === 'create' ? '新建项目' : modal === 'manage' ? '管理项目' : modal === 'trash' ? '最近删除' : modal === 'history' ? `${steps[step]} · 演示版本` : modal === 'export' ? '导出说明' : modal === 'fullscreen' ? `${world.name} · 放大查看` : '关于此预览'}</h2><button aria-label="关闭面板" onClick={() => setModal(null)}><X size={20} /></button></header>
       {modal === 'create' && <form className="zp-project-form" onSubmit={createProject}>
         <label htmlFor="zp-new-name">项目名称</label><input id="zp-new-name" autoFocus required maxLength={40} value={newName} onChange={event => setNewName(event.target.value)} placeholder="给你的游戏起个名字" />
         <fieldset><legend>游戏类型</legend><div className="zp-create-genres">{worlds.map(item => <label key={item.id}><input type="radio" name="project-kind" value={item.id} checked={newKind === item.id} onChange={() => setNewKind(item.id)} /><Gamepad2 size={16} />{item.genre}</label>)}</div></fieldset>

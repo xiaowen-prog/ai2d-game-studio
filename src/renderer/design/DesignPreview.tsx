@@ -134,8 +134,8 @@ export function DesignPreview({ initial }: { initial: string }) {
           </div>
         </main>
       )}
-      <dialog ref={dialog} className="design-lightbox">
-        <header><span><Maximize2 size={16} /> {theme.location} / {stage.name}</span><button type="button" aria-label="关闭放大预览" onClick={() => dialog.current?.close()}><X size={20} /></button></header>
+      <dialog ref={dialog} className="design-lightbox" aria-labelledby="design-lightbox-title">
+        <header><span id="design-lightbox-title"><Maximize2 size={16} /> {theme.location} / {stage.name}</span><button type="button" aria-label="关闭放大预览" onClick={() => dialog.current?.close()}><X size={20} /></button></header>
         {stage.kind === 'brief' ? <div className="design-brief"><h2>{stage.caption}</h2><p>{stage.brief}</p></div> : <img src={stage.kind === 'character' ? character : theme.art} alt="放大的示例成果" />}
       </dialog>
     </div>
