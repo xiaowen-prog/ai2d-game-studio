@@ -21,7 +21,10 @@ export async function startBrowserStudio(
 ) {
   const allowedOrigins = new Set(
     (process.env.NOOBI_BROWSER_ALLOWED_ORIGINS
-      ?? 'https://zaojing-game-studio-preview.dear-vale-4884.chatgpt.site')
+      // Keep the historical private Site origin and the current CloudRun
+      // preview origin in the default allowlist. Deployments can still
+      // override this with NOOBI_BROWSER_ALLOWED_ORIGINS.
+      ?? 'https://zaojing-game-studio-preview.dear-vale-4884.chatgpt.site,https://zaojing-web-341888-6-1525683482.sh.run.tcloudbase.com')
       .split(',')
       .map((value) => value.trim())
       .filter(Boolean),

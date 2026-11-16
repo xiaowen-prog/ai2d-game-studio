@@ -18,7 +18,11 @@ export function installBrowserBridge(endpoint = ''): void {
     bridgeUrl = parsedBridge.toString().replace(/\/$/u, '');
   } catch { /* same-origin mode can intentionally leave endpoint empty */ }
   if (!sameOrigin && !bridgeUrl) return;
-  const eventsUrl = new URL(`${bridgeUrl}/studio/events`);
+  // In the local bridge mode bridgeUrl is intentionally empty so the page
+  // talks to its own origin. URL(string) without a base throws in a normal
+  // browser, which used to leave the local bridge page blank before App
+  // could even request bootstrap.
+  const eventsUrl = new URL(`${bridgeUrl}/studio/events`, window.location.href);
   if (bridgeToken) eventsUrl.searchParams.set('token', bridgeToken);
   const events = new EventSource(eventsUrl);
   function subscribe<T>(channel: string, listener: (data: T) => void) {

@@ -153,9 +153,13 @@ if (smokeCapture) app.setPath('userData', resolve('.noobi-smoke/user-data'));
 app.setName('造境');
 if (process.platform === 'win32') app.setAppUserModelId('ai.ai2d.studio');
 
-const runtime = new CodexAppServer({
-  codexHome: join(app.getPath('userData'), 'codex-home'),
-});
+// The bridge normally keeps a private Codex home beside its app data. For
+// local online creation, allow the user to explicitly point it at the Codex
+// CLI home they already logged into; no credential is copied into the project.
+const configuredCodexHome = process.env.NOOBI_CODEX_HOME?.trim()
+  ? resolve(process.env.NOOBI_CODEX_HOME)
+  : join(app.getPath('userData'), 'codex-home');
+const runtime = new CodexAppServer({ codexHome: configuredCodexHome });
 const engineAdvisor = new GameEngineAdvisor(runtime);
 const harness = new GameHarness(runtime);
 const creationHarness = new GameHarness(runtime);
