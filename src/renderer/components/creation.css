@@ -1,4 +1,4 @@
-/* Spline reference: quiet panels, large artwork and one blue primary action. */
+/* Production workbench: quiet panels, large artwork and one blue primary action. */
 .creation-workspace {
   display: flex; flex: 1; flex-direction: column; min-height: 0; min-width: 0;
   overflow: auto; color: var(--text); background: var(--bg);
