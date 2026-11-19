@@ -152,12 +152,16 @@ if (smokeCapture) app.setPath('userData', resolve('.noobi-smoke/user-data'));
 
 app.setName('造境');
 if (process.platform === 'win32') app.setAppUserModelId('ai.ai2d.studio');
+const browserMode = process.env.NOOBI_BROWSER_STUDIO === '1';
 
-// The bridge normally keeps a private Codex home beside its app data. For
-// local online creation, allow the user to explicitly point it at the Codex
-// CLI home they already logged into; no credential is copied into the project.
+// The desktop app normally keeps a private Codex home beside its app data.
+// The local browser bridge is an explicit opt-in development path, so it can
+// use the Codex CLI home that is already logged in on this machine by default.
+// `NOOBI_CODEX_HOME` still wins, and no credential is copied into the project.
 const configuredCodexHome = process.env.NOOBI_CODEX_HOME?.trim()
   ? resolve(process.env.NOOBI_CODEX_HOME)
+  : browserMode
+    ? resolve(process.env.CODEX_HOME?.trim() || join(homedir(), '.codex'))
   : join(app.getPath('userData'), 'codex-home');
 const runtime = new CodexAppServer({ codexHome: configuredCodexHome });
 const engineAdvisor = new GameEngineAdvisor(runtime);
@@ -191,7 +195,6 @@ let mediaGenerationService: MediaGenerationService;
 let mcpConfigManager: McpConfigManager;
 let promptTemplateStore: PromptTemplateStore;
 let imageGenerationAttestations: ImageGenerationAttestationStore;
-const browserMode = process.env.NOOBI_BROWSER_STUDIO === '1';
 const browserOperations = new Map<string, (...args: any[]) => unknown>();
 const browserChannels = new Set([
   'noobi:bootstrap', 'noobi:creation:get', 'noobi:creation:act', 'noobi:creation:preview',

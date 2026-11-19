@@ -28,7 +28,7 @@ npm run dev
 npm run online:bridge
 ```
 
-然后打开 [造境私有在线制作台](https://zaojing-game-studio-preview.dear-vale-4884.chatgpt.site)，点击「打开实时制作台」。真实生成、修改、历史恢复和导出仍由本机现有运行时完成。
+命令会自动打开带 `studioToken` 的本机正式制作台地址，并在终端打印备用地址。真实生成、修改、历史恢复和导出仍由本机现有运行时完成；公开 refined 页面只能展示界面和「林间跃迁」试玩，不能替代本机桥接。
 
 ## 工程检查
 
